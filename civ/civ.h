@@ -1,6 +1,19 @@
 #ifndef __CIV_H
 #define __CIV_H
-#include <stdint.h>
+
+// Types and functions
+#include <stdbool.h> // bool
+#include <stdlib.h>  // size_t, NULL, malloc, exit, etc.
+#include <stdint.h>  // usize16_t, etc
+#include <string.h>  // (mem|str)(cmp|cpy|move|set), strlen
+#include <setjmp.h>  // setjmp
+
+// Testing and debuggin
+#include <assert.h>  // assert
+#include <stdio.h>   // printf
+#include <errno.h>   // errno global
+
+#include "constants.h"
 
 #if UINTPTR_MAX == 0xFFFF
 #define RSIZE   4
@@ -8,11 +21,19 @@
 #define RSIZE   8
 #endif
 
+#define R0   return 0;
+#define RV   return;
+
+#define eprintf(F, ...)   fprintf(stderr, F __VA_OPT__(,) __VA_ARGS__)
+
 
 // TO asTO(FROM);
-#define DECLARE_AS(TO, FROM)  TO* as##TO(FROM* f)
+#define DECLARE_AS(TO, FROM)  TO* FROM##As##TO(FROM* f)
 #define DEFINE_AS(TO, FROM) \
    DECLARE_AS(TO, FROM) { return (TO*) f; }
+
+
+
 
 // #################################
 // # Core Types and common methods
@@ -33,18 +54,46 @@ typedef I4                   IRef;
 typedef I8                   IRef;
 #endif
 
-typedef struct { U1* dat; U2 len;                 } CSlc;
-typedef struct { U1* dat; U2 len; U2 cap;         } CBuf;
-typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } CPlcBuf;
+typedef struct { U1* dat; U2 len;                 } Slc;
+typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
+typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
 
-DECLARE_AS(CSlc, CBuf);     // CSlc asCSlc(CBuf)
-DECLARE_AS(CBuf, CPlcBuf);  // CBuf asCBuf(CPlcBuf)
+DECLARE_AS(Slc, Buf);     // Slc* BufAsSlc(Buf*)
+DECLARE_AS(Slc, PlcBuf);  // Slc* BufAsSlc(PlcBuf*)
+DECLARE_AS(Buf, PlcBuf);  // Buf* BufAsBuf(PlcBuf*)
 
-CSlc CSlc_from(U1* s);
-void CBuf_copy(CBuf* b, U1* s);
+Slc Slc_from(U1* s);
+void Buf_copy(Buf* b, U1* s);
 
-U4 minU4(U4 a, U4 b);
-U4 maxU4(U4 a, U4 b);
+U4  minU4(U4 a, U4 b);
+Ref minRef(Ref a, Ref b);
+
+U4  maxU4(U4 a, U4 b);
+Ref maxRef(Ref a, Ref b);
+
+// #################################
+// # Error Handling and Testing
+
+
+#define TEST(NAME) \
+  void test_ ## NAME () {                 \
+    jmp_buf localErrJmp, expectErrJmp; \
+    civ.errJmp = &localErrJmp; \
+    eprintf("## Testing " #NAME "...\n"); \
+    if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
+
+#define END_TEST  }
+
+#define SET_ERR(E)  if(true) { \
+  assert(E); civErr = E; \
+  longjmp(*civ.errJmp, 1); }
+#define ASM_ASSERT(C, E)   if(!(C)) { SET_ERR(E); }
+#define ASSERT_NO_ERR()    assert(!civErr)
+#define ASSERT_EQ(E, CODE) if(1) { \
+  typeof(E) __result = CODE; \
+  if((E) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", E, __result); \
+  assert((E) == __result); }
+
 
 // #################################
 // # Roles
@@ -62,15 +111,66 @@ U4 maxU4(U4 a, U4 b);
 //   void (*)(void*, U1, U2) myFunc
 #define Role_METHOD(M, ...)  ((void (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
 
+// #################################
+// # Allocators
+#define BLOCK_PO2  12
+#define BLOCK_SIZE (1<<BLOCK_PO2)
+#define BLOCK_END  0xFF
+typedef struct { U1 dat[BLOCK_SIZE];                             } Block;
+typedef struct { U1 previ; U1 nexti;                             } BANode;
+typedef struct { BANode* nodes; Block* blocks; U1 rooti; U1 cap; } BA;
+typedef struct { BA* ba; U1 rooti; U2 len; U2 cap;               } BBA;
 
+// Initialize a BA
+void BA_init(BA* ba);
 
+// Allocate a block, updating BlockAllocator and client's root indexes.
+//
+// Go from:
+//   baRoot     -> d -> e -> f
+//   clientRoot -> c -> b -> a
+// To (returning block 'd'):
+//   baRoot     -> e -> f
+//   clientRoot -> d -> c -> b -> a
+Block* BA_alloc(BA* ba, U1* clientRooti);
+
+// Free a block, updating BlockAllocator and client's root indexes.
+//
+// Go from (freeing c):
+//   clientRoot -> c -> b -> a
+//   baRoot     -> d -> e -> f
+// To:
+//   clientRoot -> b -> a
+//   baRoot     -> c -> d -> e -> f
+void BA_free(BA* ba, uint8_t* clientRooti, Block* b);
+
+// Free all blocks owned by the client.
+//
+// Go from:
+//   clientRoot -> c -> b -> a
+//   baRoot     -> d -> e -> f
+// To:
+//   clientRoot -> END
+//   baRoot     -> a -> b -> c -> d -> e -> f
+void BA_freeAll(BA* ba, U1* clientRooti);
 
 // #################################
-// # File Role
+// # Civ Global Environment
 
-// File Methods
 typedef struct {
-  void (*open)  (void* d, CSlc path);
+  BA  ba;
+  jmp_buf*   errJmp;
+  U2         civErr;
+  U2         civState;
+  void (*civErrPrinter)();
+} Civ;
+
+extern Civ civ;
+
+// #################################
+// # File
+typedef struct {
+  void (*open)  (void* d, Slc path);
   void (*close) (void* d);
   void (*stop)  (void* d);
   void (*seek)  (void* d, long int offset, U1 whence); // 1=SET, 2=CUR, 3=END
@@ -82,7 +182,7 @@ typedef struct {
 typedef struct {
   Ref      pos;   // current position in file. If seek: desired position.
   Ref      fid;   // file id or reference
-  CPlcBuf  buf;   // buffer for reading or writing data
+  PlcBuf   buf;   // buffer for reading or writing data
   U2       code;  // status or error (File_*)
 } File;
 

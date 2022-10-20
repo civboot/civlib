@@ -1,28 +1,33 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <stddef.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-#include <assert.h>
-#include <errno.h>
-#include <stddef.h>
-#include <string.h>
+#include <unistd.h> // read, write, lseek
+#include <fcntl.h>  // creat, open
 
 #include "./civ_unix.h"
 
 #define UFile_FD(F)      ((~File_INDEX) & (F).fid)
 
+void civErrPrinter() { eprintf("!! Error #%X\n", civ.civErr); }
+
+void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks) {
+  civ.ba = (BA) {
+    .nodes = nodes, .blocks = blocks,
+    .rooti  = BLOCK_END, .cap = numBlocks,
+  };
+  civ.civErrPrinter = civErrPrinter;
+  civ.civErr = 0;
+}
+
+// #################################
+// # File
 File UFile_malloc(U4 bufCap) {
   return (File) {
-    .buf = (CPlcBuf) { .dat = malloc(bufCap), .cap = bufCap },
+    .buf = (PlcBuf) { .dat = malloc(bufCap), .cap = bufCap },
     .code = File_DONE,
   };
 }
 
 // Re-use a file object
 void File_clear(File* f) {
-  *f = (File) {.buf = (CPlcBuf) { .dat = f->buf.dat, .cap = f->buf.cap } };
+  *f = (File) {.buf = (PlcBuf) { .dat = f->buf.dat, .cap = f->buf.cap } };
 }
 
 void UFile_drop(File* f) { free(f->buf.dat); }
@@ -33,7 +38,7 @@ int UFile_handleErr(File* f, int res) {
   return res;
 }
 
-void UFile_open(File* f, CSlc path) {
+void UFile_open(File* f, Slc path) {
   assert(path.len < 255);
   uint8_t pathname[256];
   memcpy(pathname, path.dat, path.len);
@@ -60,7 +65,7 @@ void UFile_read(File* f) {
   assert(f->code == File_READING || f->code >= File_DONE);
   int len;
   if(!(File_INDEX & f->fid)) { // mocked file.
-    CPlcBuf* p = (CPlcBuf*) f->fid;
+    PlcBuf* p = (PlcBuf*) f->fid;
     len = minU4(p->len - p->plc, f->buf.cap - f->buf.len);
     memmove(f->buf.dat, p->dat + p->plc, len); p->plc += len;
   } else {
@@ -81,36 +86,12 @@ void UFile_readAll(File* f) {
 }
 
 M_File M_UFile = (M_File) {
-  .open  = Role_METHOD(UFile_open, CSlc path),
+  .open  = Role_METHOD(UFile_open, Slc path),
   .close = Role_METHOD(UFile_close),
   .stop = Role_METHOD(UFile_stop),
   .seek = Role_METHOD(UFile_seek, long int, U1),
   .clear = NULL,
   .read = Role_METHOD(UFile_read),
-  .insert = NULL,
+  .insert = NULL, // not supported
 };
 
-void main() {
-  uint64_t direct                     = 1ULL << 63;
-  uint64_t calculated = 1; calculated = calculated << 63;
-  printf("direct: %llx  calculated: %llx\n", File_INDEX, calculated);
-
-  File f = UFile_malloc(20);
-  UFile_open(&f, CSlc_from("data/UFile_test.txt")); assert(f.code == File_DONE);
-  UFile_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
-
-  UFile_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
-
-  UFile_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
-
-  UFile_readAll(&f);
-  assert(f.buf.len == 2); assert(f.code == File_EOF);
-  assert(0 == memcmp(f.buf.dat, "\n\n", 2));
-  UFile_close(&f); UFile_drop(&f);
-}
