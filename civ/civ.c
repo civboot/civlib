@@ -25,9 +25,9 @@ void Buf_copy(Buf* b, U1* s) {
   b->len = strlen(s); assert(b->cap >= b->len); memcpy(b->dat, s, b->len);
 }
 
-// #define BA_block(BA, BI) ((BA).blocks + ((BI) << BLOCK_PO2))
+// #################################
+// # BA: Block Allocator
 #define BA_index(BA, BLOCK)   (((BLOCK) - (BA).blocks) >> BLOCK_PO2)
-// #define BBA_ba(bba) asPtr(BA, (bba).ba)
 
 void BA_init(BA* ba) {
   if(ba->cap == 0) return; ASM_ASSERT(ba->cap < BLOCK_END, 0x0C00);

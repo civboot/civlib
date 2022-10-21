@@ -76,19 +76,21 @@ Ref maxRef(Ref a, Ref b);
 
 
 #define TEST(NAME) \
-  void test_ ## NAME () {                 \
+  void test_ ## NAME () {              \
     jmp_buf localErrJmp, expectErrJmp; \
-    civ.errJmp = &localErrJmp; \
+    civ.fb = &civ.rootFiber;           \
+    civ.fb->errJmp = &localErrJmp;     \
+    civ.fb->errJmp = &localErrJmp; \
     eprintf("## Testing " #NAME "...\n"); \
     if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
 
 #define END_TEST  }
 
 #define SET_ERR(E)  if(true) { \
-  assert(E); civErr = E; \
-  longjmp(*civ.errJmp, 1); }
+  assert(E); civ.fb->err = E; \
+  longjmp(*civ.fb->errJmp, 1); }
 #define ASM_ASSERT(C, E)   if(!(C)) { SET_ERR(E); }
-#define ASSERT_NO_ERR()    assert(!civErr)
+#define ASSERT_NO_ERR()    assert(!civ.fb->err)
 #define ASSERT_EQ(E, CODE) if(1) { \
   typeof(E) __result = CODE; \
   if((E) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", E, __result); \
@@ -112,7 +114,7 @@ Ref maxRef(Ref a, Ref b);
 #define Role_METHOD(M, ...)  ((void (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
 
 // #################################
-// # Allocators
+// # BA: Block Allocator
 #define BLOCK_PO2  12
 #define BLOCK_SIZE (1<<BLOCK_PO2)
 #define BLOCK_END  0xFF
@@ -154,14 +156,23 @@ void BA_free(BA* ba, uint8_t* clientRooti, Block* b);
 //   baRoot     -> a -> b -> c -> d -> e -> f
 void BA_freeAll(BA* ba, U1* clientRooti);
 
+
 // #################################
 // # Civ Global Environment
 
-typedef struct {
-  BA  ba;
+typedef struct _Fiber {
+  struct _Fiber* next;
+  struct _Fiber* prev;
   jmp_buf*   errJmp;
-  U2         civErr;
-  U2         civState;
+  U2 err;
+} Fiber;
+
+typedef struct {
+  BA         ba;    // root block allocator
+  Fiber*     fb;    // currently executing fiber
+
+  // Misc (normally not set/read)
+  Fiber rootFiber;
   void (*civErrPrinter)();
 } Civ;
 

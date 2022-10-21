@@ -5,7 +5,7 @@
 
 #define UFile_FD(F)      ((~File_INDEX) & (F).fid)
 
-void civErrPrinter() { eprintf("!! Error #%X\n", civ.civErr); }
+void civErrPrinter() { eprintf("!! Error #%X\n", civ.fb->err); }
 
 void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks) {
   civ.ba = (BA) {
@@ -13,7 +13,7 @@ void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks) {
     .rooti  = BLOCK_END, .cap = numBlocks,
   };
   civ.civErrPrinter = civErrPrinter;
-  civ.civErr = 0;
+  civ.fb->err = 0;
 }
 
 // #################################
