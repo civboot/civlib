@@ -7,6 +7,31 @@
 /*extern*/ U2 civErr        = 0;
 /*extern*/ Civ civ          = (Civ) {};
 
+// ####
+// # Core methods
+
+// ##
+// # Big Endian (unaligned) Fetch/Store
+U4 ftBE(U1* p, Slot size) { // fetch Big Endian
+  switch(size) {
+    case 1: return *p;                  case 2: return (*p<<8) + *(p + 1);
+    case 4: return (*p << 24) + (*(p + 1)<<16) + (*(p + 2)<<8) + *(p + 3);
+    default: SET_ERR(Slc_ntLit("ftBE: invalid sz"));
+  }
+}
+
+void srBE(U1* p, Slot size, U4 value) { // store Big Endian
+  switch(size) {
+    case 1: *p = value; break;
+    case 2: *p = value>>8; *(p+1) = value; break;
+    case 4: *p = value>>24; *(p+1) = value>>16; *(p+2) = value>>8; *(p+3) = value;
+            break;
+    default: SET_ERR(Slc_ntLit("srBE: invalid sz"));
+  }
+}
+
+// ##
+// # min/max
 #define MIN_DEF { if(a < b) return a; return b; }
 U4  U4_min (U4  a, U4  b) MIN_DEF
 Ref Ref_min(Ref a, Ref b) MIN_DEF
@@ -15,15 +40,10 @@ Ref Ref_min(Ref a, Ref b) MIN_DEF
 U4  U4_max (U4  a, U4  b) MAX_DEF
 Ref Ref_max(Ref a, Ref b) MAX_DEF
 
-DEFINE_AS(Buf,    /*as*/Slc);
-DEFINE_AS(PlcBuf, /*as*/Slc);
-DEFINE_AS(PlcBuf, /*as*/Buf);
-DEFINE_AS(Arena,  /*as*/Resource);
-DEFINE_AS(RFile,  /*as*/Resource);
-
-Slc CStr_asSlc(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
-
-Slc sSlc(U1* s)         { return (Slc) { .dat = s,      .len = strlen(s) }; }
+// ##
+// # Slc
+Slc Slc_frNt(U1* s)     { return (Slc) { .dat = s,      .len = strlen(s) }; }
+Slc Slc_frCStr(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
 
 I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
   U2 len; if(l.len < r.len) len = l.len;  else len = r.len;
@@ -38,13 +58,20 @@ I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
   return 0;
 }
 
-void Buf_copy(Buf* b, U1* s) {
-  b->len = strlen(s); assert(b->cap >= b->len); memcpy(b->dat, s, b->len);
+// ##
+// # Buf + PlcBuf
+DEFINE_AS(Buf,    /*as*/Slc);
+DEFINE_AS(PlcBuf, /*as*/Slc);
+DEFINE_AS(PlcBuf, /*as*/Buf);
+
+void Buf_ntCopy(Buf* b, U1* s) {
+  b->len = strlen(s);
+  ASSERT(b->cap >= b->len, "Buf_ntCopy: copy too large");
+  memcpy(b->dat, s, b->len);
 }
 
 // #################################
 // # BA: Block Allocator
-
 #define BA_index(BA, BLOCK)   (((Ref)(BLOCK) - (Ref)(BA).blocks) >> BLOCK_PO2)
 
 void BA_init(BA* ba) {
@@ -112,6 +139,7 @@ void BA_freeAll(BA* ba, U1* clientRooti) {
 
 // #################################
 // # BBA: Block Bump Arena
+DEFINE_AS(Arena,  /*as*/Resource);
 
 BBA BBA_new(BA* ba) { return (BBA) { .ba = ba, .rooti = BLOCK_END}; }
 
@@ -170,7 +198,7 @@ Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
 //
 // This can be used like this:
 //   Bst* node = NULL;
-//   I4 cmp = Bst_find(&node, S_SLC("myNode"));
+//   I4 cmp = Bst_find(&node, Slc_ntLit("myNode"));
 //   // if   not node    : *node was null (Bst is empty)
 //   // elif cmp == 0    : *node key == "myNode"
 //   // elif cmp < 0     : *node key <  "myNode"
@@ -178,7 +206,7 @@ Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
 I4 Bst_find(Bst** node, Slc slc) {
   if(!*node) return 0;
   while(true) {
-    I4 cmp = Slc_cmp(slc, CStr_asSlc((*node)->key));
+    I4 cmp = Slc_cmp(slc, Slc_frCStr((*node)->key));
     if(cmp == 0) return 0; // found exact match
     if(cmp < 0) {
       if((*node)->l)  *node = (*node)->l; // search left
@@ -197,10 +225,14 @@ I4 Bst_find(Bst** node, Slc slc) {
 Bst* Bst_add(Bst** root, Bst* add) {
   if(!*root) { *root = add; return NULL; } // new root
   Bst* node = *root; // prevent modification to root
-  I4 cmp = Bst_find(&node, CStr_asSlc(add->key));
+  I4 cmp = Bst_find(&node, Slc_frCStr(add->key));
   if(cmp == 0) return node;
   if(cmp < 0) node->l = add;
   else        node->r = add;
   add->l = 0, add->r = 0;
   return NULL;
 }
+
+// #################################
+// # File
+DEFINE_AS(RFile,  /*as*/Resource);

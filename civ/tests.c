@@ -9,41 +9,58 @@ TEST(basic)
   assert(sizeof("hello") == 6); // 1 byte for null terminator
   static const char s0[1 + sizeof("hello")] = "\x05" "hello";
   assert(5 == s0[0]);
-  CStr_var(s1, "\x07", "goodbye");
+  CStr_ntVar(s1, "\x07", "goodbye");
   assert(7 == s1->count);
   assert(0 == strcmp(s1->dat, "goodbye"));
+
+  Slc s2 = Slc_lit(0, 1, 2, 3, 4);
+  TASSERT_EQ(5, s2.len);
+  TASSERT_EQ(3, s2.dat[3]);
+
+  U1 dat[16] = {0};
+  srBE(dat,      1, 0x01);
+  srBE(dat + 1,  2, 0x2345);
+  srBE(dat + 3,  4, 0x6789ABCD);
+  TASSERT_EQ(0x01,         ftBE(dat, 1));
+  TASSERT_EQ(0x2345,       ftBE(dat + 1, 2));
+  TASSERT_EQ(0x6789ABCD,   ftBE(dat + 3, 4));
 END_TEST
 
-#define TEST_SLICES \
-  Ref c_a = BLOCK_SIZE * 2; \
-  Ref c_b = c_a + 4; \
-  Ref c_c = c_b + 5; \
-  memmove(asP1(c_a), "\x03" "aaa", 4); \
-  memmove(asP1(c_b), "\x04" "abbd", 5); \
-  memmove(asP1(c_c), "\x03" "abc", 4); \
-  Slc a = cAsSlc(c_a); \
-  Slc b = cAsSlc(c_b); \
-  Slc c = cAsSlc(c_c);
 
+TEST(slc)
+  Slc a = Slc_ntLit("aaa");
+  Slc b = Slc_lit('a', 'b', 'b', 'd');
+  Slc c = Slc_ntLit("abc");
+
+  TASSERT_EQ(3, a.len); TASSERT_EQ('a', a.dat[0]);
+  TASSERT_EQ(0,  Slc_cmp(a, a));
+  TASSERT_EQ(-1, Slc_cmp(a, b));
+  TASSERT_EQ(-1, Slc_cmp(a, c));
+  TASSERT_EQ(1,  Slc_cmp(b, a));
+  TASSERT_EQ(1,  Slc_cmp(c, b));
+
+  Slc c0 = Slc_ntLit("abc");
+  TASSERT_EQ(0, Slc_cmp(c, c0));
+END_TEST
 
 TEST(dict)
   Bst a, b, c;
 
   Bst* node = NULL;
-  Bst_find(&node, S_SLC("aaa"));
+  Bst_find(&node, Slc_ntLit("aaa"));
   assert(NULL == node);
 
-  CStr_var(key_a, "\x03", "aaa");
-  CStr_var(key_b, "\x04", "abbd");
-  CStr_var(key_c, "\x03", "abc");
+  CStr_ntVar(key_a, "\x03", "aaa");
+  CStr_ntVar(key_b, "\x04", "abbd");
+  CStr_ntVar(key_c, "\x03", "abc");
 
   a = (Bst) { .key = key_a };
   b = (Bst) { .key = key_b };
   c = (Bst) { .key = key_c };
 
-  Slc slc_a = CStr_asSlc(key_a);
-  Slc slc_b = CStr_asSlc(key_b);
-  Slc slc_c = CStr_asSlc(key_c);
+  Slc slc_a = Slc_frCStr(key_a);
+  Slc slc_b = Slc_frCStr(key_b);
+  Slc slc_c = Slc_frCStr(key_c);
 
   node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_b));    assert(&b == node); // b found
   node = &b; TASSERT_EQ(-1, Bst_find(&node, slc_a));    assert(&b == node); // not found
@@ -70,7 +87,7 @@ TEST(file)
     .buf = (PlcBuf) { .dat = malloc(20), .cap = 20 },
     .code = File_CLOSED,
   };
-  File_open(&f, S_SLC("data/UFile_test.txt"), File_RDONLY);
+  File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
   assert(f.code == File_DONE);
   File_readAll(&f);
   assert(f.buf.len == 20); assert(f.code == File_DONE);
@@ -130,7 +147,6 @@ END_TEST_UNIX
 
 TEST_UNIX(alloc2FreeFirst, 5)
   BANode* nodes = civ.ba.nodes;
-  printf("Nodes: %llx\n", (U8)((U4)nodes));
   uint8_t crooti = BLOCK_END; // clientRoot
 
   Block* a = BA_alloc(&civ.ba, &crooti);
@@ -167,6 +183,7 @@ END_TEST_UNIX
 int main() {
   eprintf("# Starting Tests\n");
   test_basic();
+  test_slc();
   test_dict();
   test_file();
   test_baNew();

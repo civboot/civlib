@@ -57,44 +57,62 @@ typedef I8                   IRef;
 #endif
 typedef IRef                 ISlot;
 
-// Core Structs
+// ####
+// # Core Structs
 typedef struct { U1* dat; U2 len;                 } Slc;
 typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
 typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
 typedef struct { U1 count; U1 dat[];              } CStr;
 
-// Core methods
+// ####
+// # Core methods
+
+// ##
+// # Big Endian (unaligned) Fetch/Store
+U4   ftBE(U1* p, Slot size);
+void srBE(U1* p, Slot size, U4 value);
+
+// ##
+// # min/max
 U4  U4_min(U4 a, U4 b);
 Ref Ref_min(Ref a, Ref b);
-
 U4  U4_max(U4 a, U4 b);
 Ref Ref_max(Ref a, Ref b);
 
+// ##
+// # Slc
+Slc  Slc_frNt(U1* s); // from null-terminated str
+Slc  Slc_frCStr(CStr* c);
+I4   Slc_cmp(Slc a, Slc b);
+#define Slc_ntLit(STR)  ((Slc){.dat = STR, .len = sizeof(STR) - 1})
+#define Slc_lit(...)  (Slc){           \
+    .dat = (U1[]){__VA_ARGS__},        \
+    .len = sizeof((U1[]){__VA_ARGS__}) \
+  }
+
+// ##
+// # Buf + PlcBuf
 Slc* Buf_asSlc(Buf*);
 Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
+void Buf_ntCopy(Buf* b, U1* s);
 
-Slc  CStr_asSlc(CStr* c);
+// CStr
 bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
 
 // Declare a CStr global. It's your job to assert that the LEN is valid.
-#define CStr_global(NAME, LEN, STR) \
+#define CStr_ntLitUnchecked(NAME, LEN, STR) \
   char _CStr_ ## NAME[1 + sizeof(STR)] = LEN STR; \
   CStr* NAME = (CStr*) _CStr_ ## NAME;
-  
 
 // Declare a CStr variable with auto-assert.
 // The assert runs every time the function is called (not performant),
 // but this is fine for one-off functions or tests.
-#define CStr_var(NAME, LEN, STR)      \
-  CStr_global(NAME, LEN, STR); \
+#define CStr_ntVar(NAME, LEN, STR)      \
+  static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
 
-#define S_SLC(STR)  ((Slc){.dat = STR, .len = sizeof(STR) - 1})
-Slc  sSlc(U1* s);
-void Buf_copy(Buf* b, U1* s);
 
-I4   Slc_cmp(Slc a, Slc b);
 
 // #################################
 // # Error Handling and Testing
@@ -112,7 +130,7 @@ I4   Slc_cmp(Slc a, Slc b);
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
   longjmp(*civ.fb->errJmp, 1); }
-#define ASSERT(C, E)   if(!(C)) { SET_ERR(S_SLC(E)); }
+#define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
 #define TASSERT_EQ(EXPECT, CODE) if(1) { \
   typeof(EXPECT) __result = CODE; \
