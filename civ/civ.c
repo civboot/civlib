@@ -22,6 +22,7 @@ DEFINE_AS(Arena,  /*as*/Resource);
 DEFINE_AS(RFile,  /*as*/Resource);
 
 Slc CStr_asSlc(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
+
 Slc sSlc(U1* s)         { return (Slc) { .dat = s,      .len = strlen(s) }; }
 
 I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
@@ -48,7 +49,7 @@ void Buf_copy(Buf* b, U1* s) {
 
 void BA_init(BA* ba) {
   if(ba->cap == 0) return;
-  ASSERT(ba->cap < BLOCK_END, sSlc("bad BA init"));
+  ASSERT(ba->cap < BLOCK_END, "bad BA init");
   BANode* nodes = ba->nodes;
   ba->rooti = 0;
   U1 i, previ = BLOCK_END;
@@ -68,7 +69,7 @@ Block* BA_alloc(BA* ba, U1* clientRooti) {
   ba->rooti = d->nexti;  // baRoot -> e
   if (d->nexti != BLOCK_END) nodes[d->nexti].previ = BLOCK_END; // baRoot <- e
 
-  ASSERT(d->previ == BLOCK_END, sSlc("BA is corrupt")); // "d" is already root node
+  ASSERT(d->previ == BLOCK_END, "BA is corrupt"); // "d" is already root node
   d->nexti = *clientRooti; // d -> c
   if(*clientRooti != BLOCK_END) {
     nodes[*clientRooti].previ = di;  // d <- c
@@ -81,13 +82,13 @@ void BA_free(BA* ba, uint8_t* clientRooti, Block* b) {
   // Assert block is within blocks memory region
   ASSERT((b >= ba->blocks)
          and (b <= &ba->blocks[ba->cap + 1])
-         , sSlc("BA free OOB"));
+         , "BA free OOB");
   uint8_t ci = BA_index(*ba, b);
 
   BANode* nodes = ba->nodes;
   BANode* c = &nodes[ci]; // node 'c'
   if(ci == *clientRooti) {
-    ASSERT(c->previ == BLOCK_END, sSlc("BA_free corrupt"));
+    ASSERT(c->previ == BLOCK_END, "BA_free corrupt");
     *clientRooti = c->nexti; // clientRoot -> b
     if(c->nexti != BLOCK_END) {
       nodes[c->nexti].previ = BLOCK_END; // clientRoot <- b
@@ -169,7 +170,7 @@ Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
 //
 // This can be used like this:
 //   Bst* node = NULL;
-//   I4 cmp = Bst_find(&node, sSlc("myNode"));
+//   I4 cmp = Bst_find(&node, S_SLC("myNode"));
 //   // if   not node    : *node was null (Bst is empty)
 //   // elif cmp == 0    : *node key == "myNode"
 //   // elif cmp < 0     : *node key <  "myNode"

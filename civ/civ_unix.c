@@ -4,7 +4,23 @@
 
 #define File_FD(F)      ((~File_INDEX) & (F).fid)
 
+// #################################
+// # Core Types and common methods
+
 void civErrPrinter() { eprintf("!! Error #%X\n", civ.fb->err); }
+
+bool CStr_varAssert(U4 line, U1* STR, U1* LEN) {
+  if(1 != strlen(LEN)) {
+    eprintf("ERROR CStr_var [line=%u]: LEN must be single byte (line=%u)");
+    return false;
+  }
+  if(LEN[0] != strlen(STR)) {
+    eprintf("ERROR CStr_var [line=%u]: Use LEN = \"\\x%.2X\"\n", line, strlen(STR));
+    return false;
+  }
+  return true;
+}
+
 
 void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks) {
   civ.ba = (BA) {

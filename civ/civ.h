@@ -31,7 +31,6 @@
 
 #define eprintf(F, ...)   fprintf(stderr, F __VA_OPT__(,) __VA_ARGS__)
 
-
 // TO asTO(FROM);
 #define DEFINE_AS(FROM, TO) \
   TO* FROM ## _ ## as ## TO(FROM* f) { return (TO*) f; }
@@ -76,6 +75,22 @@ Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
 
 Slc  CStr_asSlc(CStr* c);
+bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
+
+// Declare a CStr global. It's your job to assert that the LEN is valid.
+#define CStr_global(NAME, LEN, STR) \
+  char _CStr_ ## NAME[1 + sizeof(STR)] = LEN STR; \
+  CStr* NAME = (CStr*) _CStr_ ## NAME;
+  
+
+// Declare a CStr variable with auto-assert.
+// The assert runs every time the function is called (not performant),
+// but this is fine for one-off functions or tests.
+#define CStr_var(NAME, LEN, STR)      \
+  CStr_global(NAME, LEN, STR); \
+  assert(CStr_varAssert(__LINE__, STR, LEN));
+
+#define S_SLC(STR)  ((Slc){.dat = STR, .len = sizeof(STR) - 1})
 Slc  sSlc(U1* s);
 void Buf_copy(Buf* b, U1* s);
 
@@ -92,18 +107,17 @@ I4   Slc_cmp(Slc a, Slc b);
     civ.fb->errJmp = &localErrJmp; \
     eprintf("## Testing " #NAME "...\n"); \
     if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
-
 #define END_TEST  }
 
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
   longjmp(*civ.fb->errJmp, 1); }
-#define ASSERT(C, E)   if(!(C)) { SET_ERR(E); }
+#define ASSERT(C, E)   if(!(C)) { SET_ERR(S_SLC(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
-#define ASSERT_EQ(E, CODE) if(1) { \
-  typeof(E) __result = CODE; \
-  if((E) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", E, __result); \
-  assert((E) == __result); }
+#define TASSERT_EQ(EXPECT, CODE) if(1) { \
+  typeof(EXPECT) __result = CODE; \
+  if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
+  assert((EXPECT) == __result); }
 
 
 // #################################
