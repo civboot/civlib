@@ -21,6 +21,10 @@
 #define RSIZE   8
 #endif
 
+#define and  &&
+#define msk  &
+#define or   ||
+#define jn   |
 #define R0   return 0;
 #define RV   return;
 
@@ -28,12 +32,8 @@
 
 
 // TO asTO(FROM);
-#define DECLARE_AS(TO, FROM)  TO* FROM##As##TO(FROM* f)
-#define DEFINE_AS(TO, FROM) \
-   DECLARE_AS(TO, FROM) { return (TO*) f; }
-
-
-
+#define DEFINE_AS(FROM, TO) \
+  TO* FROM ## _ ## as ## TO(FROM* f) { return (TO*) f; }
 
 // #################################
 // # Core Types and common methods
@@ -58,9 +58,9 @@ typedef struct { U1* dat; U2 len;                 } Slc;
 typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
 typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
 
-DECLARE_AS(Slc, Buf);     // Slc* BufAsSlc(Buf*)
-DECLARE_AS(Slc, PlcBuf);  // Slc* BufAsSlc(PlcBuf*)
-DECLARE_AS(Buf, PlcBuf);  // Buf* BufAsBuf(PlcBuf*)
+Slc* Buf_asSlc(Buf*);
+Slc* PlcBuf_asSlc(PlcBuf*);
+Buf* PlcBuf_asBuf(PlcBuf*);
 
 Slc Slc_from(U1* s);
 void Buf_copy(Buf* b, U1* s);
@@ -73,7 +73,6 @@ Ref maxRef(Ref a, Ref b);
 
 // #################################
 // # Error Handling and Testing
-
 
 #define TEST(NAME) \
   void test_ ## NAME () {              \
@@ -98,19 +97,16 @@ Ref maxRef(Ref a, Ref b);
 
 
 // #################################
-// # Roles
+// # Methods and Roles
 
-// Role Execute. Expands:
-//   REX(Role, method, arg1, arg2)
-// to
-//   Role.m.method(Role.d, arg1, arg2)
-#define REX(ROLE, METHOD, ...) \
-  (ROLE).m.METHOD(&(ROLE).d __VA_OPT__(,) __VA_ARGS__)
+// Method Execute: Xm(myTy, meth, a, b) -> MyTy_meth(myTy, a, b)
+#define Xm(D, M, ...)    typeof(*D) ## _ ## M(D __VA_OPT__(,) __VA_ARGS__)
 
-// For declaring role methods. This Expands:
-//   Role_METHOD(myFunc, U1, U2)
-// to
-//   void (*)(void*, U1, U2) myFunc
+// Role Execute: Xr(myRole, meth, a, b) -> myRole.m.meth(myRole.d, a, b)
+#define Xr(R, M, ...)    (R).m.M(&(R).d __VA_OPT__(,) __VA_ARGS__)
+
+// Declare role method:
+//   Role_METHOD(myFunc, U1, U2) -> void (*)(void*, U1, U2) myFunc
 #define Role_METHOD(M, ...)  ((void (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
 
 // #################################
@@ -156,6 +152,36 @@ void BA_free(BA* ba, uint8_t* clientRooti, Block* b);
 //   baRoot     -> a -> b -> c -> d -> e -> f
 void BA_freeAll(BA* ba, U1* clientRooti);
 
+// #################################
+// # Arena Role
+typedef struct {
+  void (*drop)            (void* d);
+  void (*alloc)           (void* d, Ref size);
+  void (*allocUnaligned)  (void* d, Ref size);
+  void (*free)            (void* d, Ref size);
+} M_Arena;
+
+
+// #################################
+// # BBA: Block Bump Arena
+// For storing code and dictionary entries which reference code, fngi uses a
+// block bump arena. This "bumps" memory from the top (for aligned) or bottom of
+// a 4k block, but does not allow freeing it. However, the entire arena can be
+// dropped to recover all the memory without fragmentation.
+
+BBA BBA_new(BA* ba);
+
+// Allocate "aligned" data from the top of the block.
+//
+// WARNING: It is the caller's job to ensure that size is suitably alligned to
+// their system width.
+U1* BBA_alloc(BBA* bba, Ref size);
+
+// Allocate "unaligned" data from the bottom of the block.
+U1* BBA_allocUnaligned(BBA* bba, Ref size);
+
+void BBA_drop(BBA* bba);
+
 
 // #################################
 // # Civ Global Environment
@@ -189,13 +215,6 @@ typedef struct {
   void (*read)  (void* d);
   void (*insert)(void* d);
 } M_File;
-
-typedef struct {
-  Ref      pos;   // current position in file. If seek: desired position.
-  Ref      fid;   // file id or reference
-  PlcBuf   buf;   // buffer for reading or writing data
-  U2       code;  // status or error (File_*)
-} File;
 
 // If set it is a real "file index/id"
 #define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))

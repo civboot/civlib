@@ -28,7 +28,7 @@ TEST(file)
   UFile_close(&f); UFile_drop(&f);
 END_TEST
 
-TEST_UNIX(baNew, 5)  BA_init(&civ.ba);
+TEST_UNIX(baNew, 5)
   BANode* nodes = civ.ba.nodes;
 
   ASSERT_EQ(4, civ.ba.cap);
@@ -41,7 +41,7 @@ TEST_UNIX(baNew, 5)  BA_init(&civ.ba);
   ASSERT_EQ(BLOCK_END, nodes[3].nexti);
 END_TEST_UNIX
 
-TEST_UNIX(allocFree, 5) BA_init(&civ.ba);
+TEST_UNIX(allocFree, 5)
   BANode* nodes = civ.ba.nodes;
   U1 crooti = BLOCK_END; // clientRoot
 
@@ -65,8 +65,9 @@ TEST_UNIX(allocFree, 5) BA_init(&civ.ba);
   ASSERT_EQ(0         , nodes[1].previ);
 END_TEST_UNIX
 
-TEST_UNIX(alloc2FreeFirst, 5) BA_init(&civ.ba);
+TEST_UNIX(alloc2FreeFirst, 5)
   BANode* nodes = civ.ba.nodes;
+  printf("Nodes: %llx\n", (U8)((U4)nodes));
   uint8_t crooti = BLOCK_END; // clientRoot
 
   Block* a = BA_alloc(&civ.ba, &crooti);
@@ -86,6 +87,20 @@ TEST_UNIX(alloc2FreeFirst, 5) BA_init(&civ.ba);
   ASSERT_EQ(2         , nodes[0].nexti);
 END_TEST_UNIX
 
+TEST_UNIX(bba, 5)
+  BBA bba = BBA_new(&civ.ba);
+
+  BANode* nodes = civ.ba.nodes;
+  ASSERT_EQ((U1*) civ.ba.blocks + BLOCK_SIZE - 12  , BBA_alloc(&bba, 12));
+  ASSERT_EQ((U1*)&civ.ba.blocks[1]      , BBA_alloc(&bba, BLOCK_SIZE));
+  ASSERT_EQ((U1*)&civ.ba.blocks[2]      , BBA_allocUnaligned(&bba, 13));
+  ASSERT_EQ((U1*)&civ.ba.blocks[2] + 13 , BBA_allocUnaligned(&bba, 25));
+  ASSERT_EQ((U1*)&civ.ba.blocks[3]      , BBA_allocUnaligned(&bba, BLOCK_SIZE - 20));
+  ASSERT_EQ(NULL                        , BBA_alloc(&bba, BLOCK_SIZE));
+  BBA_drop(&bba);
+  ASSERT_EQ((U1*) civ.ba.blocks         , BBA_allocUnaligned(&bba, 12));
+END_TEST_UNIX
+
 int main() {
   eprintf("# Starting Tests\n");
   test_basic();
@@ -93,6 +108,7 @@ int main() {
   test_baNew();
   test_allocFree();
   test_alloc2FreeFirst();
+  test_bba();
   eprintf("# Tests All Pass\n");
   return 0;
 }

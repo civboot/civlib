@@ -15,9 +15,9 @@ Ref minRef(Ref a, Ref b) MIN_DEF
 U4  maxU4 (U4  a, U4  b) MAX_DEF
 Ref maxRef(Ref a, Ref b) MAX_DEF
 
-DEFINE_AS(Slc, Buf);     // Slc* BufAsSlc(Buf*)
-DEFINE_AS(Slc, PlcBuf);  // Slc* BufAsSlc(PlcBuf*)
-DEFINE_AS(Buf, PlcBuf);  // Buf* BufAsBuf(PlcBuf*)
+DEFINE_AS(Buf,    /*as*/Slc);
+DEFINE_AS(PlcBuf, /*as*/Slc);
+DEFINE_AS(PlcBuf, /*as*/Buf);
 
 Slc Slc_from(U1* s) { return (Slc) { .dat = s, .len = strlen(s) }; }
 
@@ -27,7 +27,8 @@ void Buf_copy(Buf* b, U1* s) {
 
 // #################################
 // # BA: Block Allocator
-#define BA_index(BA, BLOCK)   (((BLOCK) - (BA).blocks) >> BLOCK_PO2)
+
+#define BA_index(BA, BLOCK)   (((Ref)(BLOCK) - (Ref)(BA).blocks) >> BLOCK_PO2)
 
 void BA_init(BA* ba) {
   if(ba->cap == 0) return; ASM_ASSERT(ba->cap < BLOCK_END, 0x0C00);
@@ -61,9 +62,10 @@ Block* BA_alloc(BA* ba, U1* clientRooti) {
 
 void BA_free(BA* ba, uint8_t* clientRooti, Block* b) {
   // Assert block is within blocks memory region
-  ASM_ASSERT(b >= ba->blocks, E_oob);
+  ASM_ASSERT(    (b >= ba->blocks)
+             and (b <= &ba->blocks[ba->cap + 1])
+           , E_oob);
   uint8_t ci = BA_index(*ba, b);
-  ASM_ASSERT(ci < ba->cap, E_oob);
 
   BANode* nodes = ba->nodes;
   BANode* c = &nodes[ci]; // node 'c'
@@ -88,4 +90,46 @@ void BA_freeAll(BA* ba, U1* clientRooti) {
   while(BLOCK_END != *clientRooti) {
     BA_free(ba, clientRooti, &ba->blocks[*clientRooti]);
   }
+}
+
+// #################################
+// # BBA: Block Bump Arena
+
+
+BBA BBA_new(BA* ba) { return (BBA) { .ba = ba, .rooti = BLOCK_END}; }
+
+bool _BBA_reserveIfSmall(BBA* bba, U2 size) {
+  if((bba->cap) < (bba->len) + size) {
+    if(0 == BA_alloc(bba->ba, &bba->rooti)) return false;
+    bba->len = 0;
+    bba->cap = BLOCK_SIZE;
+  }
+  return true;
+}
+
+// Allocate "aligned" data from the top of the block.
+//
+// WARNING: It is the caller's job to ensure that size is suitably alligned to
+// their system width.
+U1* BBA_alloc(BBA* bba, Ref size) {
+  if(!_BBA_reserveIfSmall(bba, size)) return 0;
+  bba->cap -= size;
+  U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->cap;
+  return out;
+}
+
+// Allocate "unaligned" data from the bottom of the block.
+U1* BBA_allocUnaligned(BBA* bba, Ref size) {
+  if(!_BBA_reserveIfSmall(bba, size)) return 0;
+  U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->len;
+  bba->len += size;
+  return out;
+}
+
+void BBA_drop(BBA* bba) {
+  BA* ba = bba->ba;
+  while(bba->rooti != BLOCK_END)
+    BA_free(ba, &bba->rooti, &ba->blocks[bba->rooti]);
+  assert(BLOCK_END == bba->rooti);
+  bba->len = 0; bba->cap = 0;
 }
