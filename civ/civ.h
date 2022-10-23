@@ -21,6 +21,7 @@
 #define RSIZE   8
 #endif
 
+#define not  !
 #define and  &&
 #define msk  &
 #define or   ||
@@ -38,11 +39,13 @@
 // #################################
 // # Core Types and common methods
 
+// Core Types
 typedef uint8_t              U1;
 typedef uint16_t             U2;
 typedef uint32_t             U4;
 typedef uint64_t             U8;
 typedef size_t               Ref;
+typedef Ref                  Slot;
 
 typedef int8_t               I1;
 typedef int16_t              I2;
@@ -53,23 +56,30 @@ typedef I4                   IRef;
 #else
 typedef I8                   IRef;
 #endif
+typedef IRef                 ISlot;
 
+// Core Structs
 typedef struct { U1* dat; U2 len;                 } Slc;
 typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
 typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
+typedef struct { U1 count; U1 dat[];              } CStr;
+
+// Core methods
+U4  U4_min(U4 a, U4 b);
+Ref Ref_min(Ref a, Ref b);
+
+U4  U4_max(U4 a, U4 b);
+Ref Ref_max(Ref a, Ref b);
 
 Slc* Buf_asSlc(Buf*);
 Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
 
-Slc Slc_from(U1* s);
+Slc  CStr_asSlc(CStr* c);
+Slc  sSlc(U1* s);
 void Buf_copy(Buf* b, U1* s);
 
-U4  minU4(U4 a, U4 b);
-Ref minRef(Ref a, Ref b);
-
-U4  maxU4(U4 a, U4 b);
-Ref maxRef(Ref a, Ref b);
+I4   Slc_cmp(Slc a, Slc b);
 
 // #################################
 // # Error Handling and Testing
@@ -86,9 +96,9 @@ Ref maxRef(Ref a, Ref b);
 #define END_TEST  }
 
 #define SET_ERR(E)  if(true) { \
-  assert(E); civ.fb->err = E; \
+  civ.fb->err = E; \
   longjmp(*civ.fb->errJmp, 1); }
-#define ASM_ASSERT(C, E)   if(!(C)) { SET_ERR(E); }
+#define ASSERT(C, E)   if(!(C)) { SET_ERR(E); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
 #define ASSERT_EQ(E, CODE) if(1) { \
   typeof(E) __result = CODE; \
@@ -99,15 +109,13 @@ Ref maxRef(Ref a, Ref b);
 // #################################
 // # Methods and Roles
 
-// Method Execute: Xm(myTy, meth, a, b) -> MyTy_meth(myTy, a, b)
-#define Xm(D, M, ...)    typeof(*D) ## _ ## M(D __VA_OPT__(,) __VA_ARGS__)
-
 // Role Execute: Xr(myRole, meth, a, b) -> myRole.m.meth(myRole.d, a, b)
 #define Xr(R, M, ...)    (R).m.M(&(R).d __VA_OPT__(,) __VA_ARGS__)
 
 // Declare role method:
 //   Role_METHOD(myFunc, U1, U2) -> void (*)(void*, U1, U2) myFunc
-#define Role_METHOD(M, ...)  ((void (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
+#define Role_METHOD(M, ...)      ((void (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
+#define Role_METHODR(M, R, ...)  ((R    (*)(void* __VA_OPT__(,) __VA_ARGS__)) M)
 
 // #################################
 // # BA: Block Allocator
@@ -117,7 +125,12 @@ Ref maxRef(Ref a, Ref b);
 typedef struct { U1 dat[BLOCK_SIZE];                             } Block;
 typedef struct { U1 previ; U1 nexti;                             } BANode;
 typedef struct { BANode* nodes; Block* blocks; U1 rooti; U1 cap; } BA;
-typedef struct { BA* ba; U1 rooti; U2 len; U2 cap;               } BBA;
+
+typedef struct {
+  BA* ba;
+  U1 rooti;
+  U2 len; U2 cap;
+} BBA;
 
 // Initialize a BA
 void BA_init(BA* ba);
@@ -155,33 +168,49 @@ void BA_freeAll(BA* ba, U1* clientRooti);
 // #################################
 // # Arena Role
 typedef struct {
-  void (*drop)            (void* d);
-  void (*alloc)           (void* d, Ref size);
-  void (*allocUnaligned)  (void* d, Ref size);
-  void (*free)            (void* d, Ref size);
-} M_Arena;
+  void (*drop)            (void* d);          // drop whole arena
+  void (*alloc)           (void* d, Slot sz); // allocate memory of size
+  void (*allocUnaligned)  (void* d, Slot sz); // ... possibly unaligned.
+  void (*free)            (void* d, void* mem, Slot sz); // free memory of size
+} MArena;
 
+typedef struct { MArena m; void* d; } Arena;
+
+// #################################
+// # Resource Role
+typedef struct {
+  // Perform resource cleanup and drop any non-POD data (i.e. buffers, etc)
+  // This must NOT free the `d` pointer itself.
+  //
+  // Return true if drop is done. Returning false means it will be called again
+  // (although other resources may be called first).
+  bool (*drop)            (void* d, Arena* a);
+} MResource;
+
+typedef struct { MResource m; void* d; } Resource;
+Resource* Arena_asResource(Arena*);
 
 // #################################
 // # BBA: Block Bump Arena
-// For storing code and dictionary entries which reference code, fngi uses a
-// block bump arena. This "bumps" memory from the top (for aligned) or bottom of
-// a 4k block, but does not allow freeing it. However, the entire arena can be
-// dropped to recover all the memory without fragmentation.
+// This is a bump arena. Allocations "bump" the len (unaligned) or cap (aligned)
+// indexes, while frees are ignored.
+//
+// This is great for data that just grows and is rarely (or never) freed. It
+// will cause OOM for other workloads unless they are small and the Arena is
+// quickly dropped.
+Arena BBA_asArena(BBA* b);
 
+void BBA_drop(BBA* bba); // drop whole Arena
 BBA BBA_new(BA* ba);
 
 // Allocate "aligned" data from the top of the block.
 //
 // WARNING: It is the caller's job to ensure that size is suitably alligned to
 // their system width.
-U1* BBA_alloc(BBA* bba, Ref size);
+U1* BBA_alloc(BBA* bba, Slot sz);
 
 // Allocate "unaligned" data from the bottom of the block.
-U1* BBA_allocUnaligned(BBA* bba, Ref size);
-
-void BBA_drop(BBA* bba);
-
+U1* BBA_allocUnaligned(BBA* bba, Slot sz);
 
 // #################################
 // # Civ Global Environment
@@ -190,7 +219,8 @@ typedef struct _Fiber {
   struct _Fiber* next;
   struct _Fiber* prev;
   jmp_buf*   errJmp;
-  U2 err;
+  Arena*     arena;     // Global default arena
+  Slc err;
 } Fiber;
 
 typedef struct {
@@ -205,16 +235,59 @@ typedef struct {
 extern Civ civ;
 
 // #################################
+// # Binary Search Tree
+typedef struct _Bst {
+  struct _Bst* l; struct _Bst* r;
+  CStr* key;
+} Bst;
+
+I4   Bst_find(Bst** node, Slc slc);
+Bst* Bst_add(Bst** root, Bst* add);
+
+// #################################
 // # File
+// Unlike many roles, the File role requires the data structure to follow the
+// below. This is because interacting with files are inherently interacting with
+// buffers.
+//
+// System-specific data can expand on this, such as storing the file name/etc.
+
+#define File_seek_SET  1 // seek from beginning
+#define File_seek_CUR  2 // seek from current position
+#define File_seek_END  3 // seek from end
+
 typedef struct {
-  void (*open)  (void* d, Slc path);
-  void (*close) (void* d);
-  void (*stop)  (void* d);
-  void (*seek)  (void* d, long int offset, U1 whence); // 1=SET, 2=CUR, 3=END
-  void (*clear) (void* d);
-  void (*read)  (void* d);
-  void (*insert)(void* d);
-} M_File;
+  Ref      pos;   // current position in file. If seek: desired position.
+  Ref      fid;   // file id or reference
+  PlcBuf   buf;   // buffer for reading or writing data
+  U2       code;  // status or error (File_*)
+} File;
+
+typedef struct {
+  // Resource methods
+  bool (*drop) (File* d);
+
+  // Close a file
+  void (*close) (File* d);
+
+  // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
+  void (*open)  (File* d, Slc path, Slot options);
+
+  // Stop async operations (may be noop)
+  void (*stop)  (File* d);
+
+  // Seek in the file whence=File_seek_(SET|CUR|END)
+  void (*seek)  (File* d, ISlot offset, U1 whence);
+
+  // Read from a file into d buffer.
+  void (*read)  (File* d);
+
+  // Write to a file from d buffer.
+  void (*write)(File* d);
+} MFile;
+
+typedef struct { MFile* m; File* d; } RFile;  // Role
+Resource* RFile_asResource(RFile*);
 
 // If set it is a real "file index/id"
 #define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))

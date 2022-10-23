@@ -1,9 +1,10 @@
 #ifndef __CIV_UNIX_H
 #define __CIV_UNIX_H
 
+#include <fcntl.h>  // creat, open
 #include "./civ.h"
 
-#define UFile_FD(F)      ((~File_INDEX) & (F).fid)
+#define File_FD(F)      ((~File_INDEX) & (F).fid)
 
 #define TEST_UNIX(NAME, numBlocks)  TEST(NAME)  \
     Block* __blocks = malloc(numBlocks << BLOCK_PO2); \
@@ -16,21 +17,19 @@
 
 void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks);
 
-typedef struct {
-  Ref      pos;   // current position in file. If seek: desired position.
-  Ref      fid;   // file id or reference
-  PlcBuf   buf;   // buffer for reading or writing data
-  U2       code;  // status or error (File_*)
-} File;
+#define File_RDWR      O_RDWR
+#define File_RDONLY    O_RDONLY
+#define File_WRONLY    O_WRONLY
+#define File_TRUNC     O_TRUNC
 
-void UFile_drop(File* f);
-File UFile_malloc(U4 bufCap);
-void UFile_readAll(File* f);
+File File_malloc(U4 bufCap);
+void File_readAll(File* f);
 
-int UFile_handleErr(File* f, int res);
-void UFile_open(File* f, Slc s);
-void UFile_close(File* f);
-void UFile_read(File* f);
-extern M_File M_UFile;
+int File_handleErr(File* f, int res);
+bool File_drop(File* f);
+void File_open(File* f, Slc s, Slot options);
+void File_close(File* f);
+void File_read(File* f);
+RFile File_asRFile(File* d);
 
 #endif // __CIV_UNIX_H

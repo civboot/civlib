@@ -8,24 +8,29 @@ TEST(basic)
 END_TEST
 
 TEST(file)
-  File f = UFile_malloc(20);
-  UFile_open(&f, Slc_from("data/UFile_test.txt")); assert(f.code == File_DONE);
-  UFile_readAll(&f);
+  File f = (File) {
+    .buf = (PlcBuf) { .dat = malloc(20), .cap = 20 },
+    .code = File_CLOSED,
+  };
+  File_open(&f, sSlc("data/UFile_test.txt"), File_RDONLY);
+  assert(f.code == File_DONE);
+  File_readAll(&f);
   assert(f.buf.len == 20); assert(f.code == File_DONE);
   assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
 
-  UFile_readAll(&f);
+  File_readAll(&f);
   assert(f.buf.len == 20); assert(f.code == File_DONE);
   assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
 
-  UFile_readAll(&f);
+  File_readAll(&f);
   assert(f.buf.len == 20); assert(f.code == File_DONE);
   assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
 
-  UFile_readAll(&f);
+  File_readAll(&f);
   assert(f.buf.len == 2); assert(f.code == File_EOF);
   assert(0 == memcmp(f.buf.dat, "\n\n", 2));
-  UFile_close(&f); UFile_drop(&f);
+  File_close(&f);
+  free(f.buf.dat);
 END_TEST
 
 TEST_UNIX(baNew, 5)
