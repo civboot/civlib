@@ -10,6 +10,15 @@
 // ####
 // # Core methods
 
+Slot requiredBumpAdd(void* ptr, U2 alignment) {
+  Slot out = alignment - ((Slot)ptr % alignment);
+  return (out == alignment) ? 0 : out;
+}
+
+Slot requiredBumpSub(void* ptr, U2 alignment) {
+  return (Slot)ptr % alignment;
+}
+
 // ##
 // # Big Endian (unaligned) Fetch/Store
 U4 ftBE(U1* p, Slot size) { // fetch Big Endian
@@ -68,6 +77,44 @@ void Buf_ntCopy(Buf* b, U1* s) {
   b->len = strlen(s);
   ASSERT(b->cap >= b->len, "Buf_ntCopy: copy too large");
   memcpy(b->dat, s, b->len);
+}
+
+// ##
+// # Sll
+void Sll_add(Sll** to, Sll* node) {
+  Sll* next = *to;
+  *to = node;
+  node->next = next;
+}
+
+Sll* Sll_pop(Sll** from) {
+  if(not *from) return NULL;
+  Sll* out = *from;
+  *from = out->next;
+  return out;
+}
+
+// ##
+// # Dll
+
+// to -> a  ===>  to -> b -> a
+void Dll_add(Dll* to, Dll* node) {
+  node->next = to->next;
+  to->next = node;
+  node->prev = to;
+}
+
+// from -> b -> a ===> from -> a  (return b)
+Dll* Dll_pop(Dll* from) {
+  Dll* b = from->next;
+  if(b) {
+    Dll* a = b->next;
+    from->next = a;
+    if(a) a->prev = from;
+  } else {
+    from->next = NULL;
+  }
+  return b;
 }
 
 // #################################

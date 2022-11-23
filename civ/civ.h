@@ -63,9 +63,15 @@ typedef struct { U1* dat; U2 len;                 } Slc;
 typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
 typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
 typedef struct { U1 count; U1 dat[];              } CStr;
+typedef struct { void* next;                        } Sll;
+typedef struct { void* next; void* prev;            } Dll;
 
 // ####
 // # Core methods
+
+// Get the required addition/subtraction to ptr to achieve alignment
+Slot requiredBumpAdd(void* ptr, U2 alignment);
+Slot requiredBumpSub(void* ptr, U2 alignment);
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
@@ -112,6 +118,15 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
   static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
 
+// ##
+// # Sll
+void Sll_add(Sll** root, Sll* node);
+Sll* Sll_pop(Sll** root);
+
+// ##
+// # Dll
+void Dll_add(Dll* to, Dll* node);
+Dll* Dll_pop(Dll* from);
 
 
 // #################################

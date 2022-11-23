@@ -24,8 +24,37 @@ TEST(basic)
   TASSERT_EQ(0x01,         ftBE(dat, 1));
   TASSERT_EQ(0x2345,       ftBE(dat + 1, 2));
   TASSERT_EQ(0x6789ABCD,   ftBE(dat + 3, 4));
+
+  TASSERT_EQ(3, requiredBumpAdd((void*)1, 4));
+  TASSERT_EQ(2, requiredBumpAdd((void*)2, 4));
+  TASSERT_EQ(0, requiredBumpSub((void*)8,  4));
+  TASSERT_EQ(1, requiredBumpSub((void*)9,  4));
+  TASSERT_EQ(2, requiredBumpSub((void*)10, 4));
 END_TEST
 
+TEST(sll)
+  // create b -> a and then assert.
+  Sll* root = NULL;
+  Sll a = {0}; Sll b = {0};
+  Sll_add(&root, &a);  TASSERT_EQ(root, &a);
+  TASSERT_EQ(&a, Sll_pop(&root)); TASSERT_EQ(root, NULL);
+  Sll_add(&root, &a);              Sll_add(&root, &b);
+  TASSERT_EQ(root, &b);            TASSERT_EQ(b.next, &a);
+  TASSERT_EQ(&b, Sll_pop(&root));  TASSERT_EQ(&a, Sll_pop(&root));
+  TASSERT_EQ(NULL, Sll_pop(&root));
+END_TEST
+
+TEST(dll)
+  // create a -> b and then assert
+  Dll root = {0};
+  Dll a = {0}; Dll b = {0};
+  Dll_add(&root, &a);  TASSERT_EQ(root.next, &a);
+  TASSERT_EQ(&a, Dll_pop(&root));  TASSERT_EQ(root.next, NULL);
+  Dll_add(&root, &a);              Dll_add(&root, &b);
+  TASSERT_EQ(root.next, &b);       TASSERT_EQ(b.next, &a);
+  TASSERT_EQ(&b, Dll_pop(&root));  TASSERT_EQ(&a, Dll_pop(&root));
+  TASSERT_EQ(NULL, Dll_pop(&root));
+END_TEST
 
 TEST(slc)
   Slc a = Slc_ntLit("aaa");
@@ -183,6 +212,8 @@ END_TEST_UNIX
 int main() {
   eprintf("# Starting Tests\n");
   test_basic();
+  test_sll();
+  test_dll();
   test_slc();
   test_dict();
   test_file();
