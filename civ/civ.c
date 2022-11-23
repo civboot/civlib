@@ -117,125 +117,44 @@ Dll* Dll_pop(Dll* from) {
   return b;
 }
 
-// #################################
-// # BA: Block Allocator
-#define BA_index(BA, BLOCK)   (((Ref)(BLOCK) - (Ref)(BA).blocks) >> BLOCK_PO2)
-
-void BA_init(BA* ba) {
-  if(ba->cap == 0) return;
-  ASSERT(ba->cap < BLOCK_END, "bad BA init");
-  BANode* nodes = ba->nodes;
-  ba->rooti = 0;
-  U1 i, previ = BLOCK_END;
-  for (i = 0; i < ba->cap; i += 1) {
-    nodes[i].previ = previ; nodes[i].nexti = i + 1;
-    previ = i;
-  }
-  nodes[i - 1].nexti = BLOCK_END;
+// a -> node -> b ==> a -> b
+Dll* Dll_remove(Dll* node) {
+  if(not node) return NULL;
+  Dll* a = node->prev;
+  Dll* b = node->next;
+  if(a) a->next = b;
+  if(b) b->prev = a;
+  return node;
 }
 
-Block* BA_alloc(BA* ba, U1* clientRooti) {
-  uint8_t di = ba->rooti; // index of "d"
-  if(di == BLOCK_END) return 0;
-
-  BANode* nodes = ba->nodes;
-  BANode* d = &nodes[di]; // node "d"
-  ba->rooti = d->nexti;  // baRoot -> e
-  if (d->nexti != BLOCK_END) nodes[d->nexti].previ = BLOCK_END; // baRoot <- e
-
-  ASSERT(d->previ == BLOCK_END, "BA is corrupt"); // "d" is already root node
-  d->nexti = *clientRooti; // d -> c
-  if(*clientRooti != BLOCK_END) {
-    nodes[*clientRooti].previ = di;  // d <- c
-  }
-  *clientRooti = di; // clientRooti -> d
-  return &ba->blocks[di]; // return block 'd'
-}
-
-void BA_free(BA* ba, uint8_t* clientRooti, Block* b) {
-  // Assert block is within blocks memory region
-  ASSERT((b >= ba->blocks)
-         and (b <= &ba->blocks[ba->cap + 1])
-         , "BA free OOB");
-  uint8_t ci = BA_index(*ba, b);
-
-  BANode* nodes = ba->nodes;
-  BANode* c = &nodes[ci]; // node 'c'
-  if(ci == *clientRooti) {
-    ASSERT(c->previ == BLOCK_END, "BA_free corrupt");
-    *clientRooti = c->nexti; // clientRoot -> b
-    if(c->nexti != BLOCK_END) {
-      nodes[c->nexti].previ = BLOCK_END; // clientRoot <- b
-    }
-  } else { // i.e. b -> c -> d  ===>  b -> d
-    nodes[c->previ].nexti = c->nexti;
-    nodes[c->nexti].previ = c->previ;
-  }
-
-  c->nexti               = ba->rooti; // c -> d
-  nodes[ba->rooti].previ = ci;        // c <- d
-  ba->rooti              = ci;        // baRoot -> c
-  c->previ               = BLOCK_END; // baRoot <- c
-}
-
-void BA_freeAll(BA* ba, U1* clientRooti) {
-  while(BLOCK_END != *clientRooti) {
-    BA_free(ba, clientRooti, &ba->blocks[*clientRooti]);
+//     root              root
+//       v      ==>        v
+// a <-> b           a <-> node <-> b
+void DllRoot_add(DllRoot* root, Dll* node) {
+  Dll* b = root->start;
+  root->start = node;
+  if(b) {
+    node->next = b;
+    Dll* a = b->prev;
+    node->prev = a;
+    if(a) a->next = node;
+    b->prev = node;
+  } else {
+    node->next = NULL;
+    node->prev = NULL;
   }
 }
 
-// #################################
-// # BBA: Block Bump Arena
-DEFINE_AS(Arena,  /*as*/Resource);
-
-BBA BBA_new(BA* ba) { return (BBA) { .ba = ba, .rooti = BLOCK_END}; }
-
-bool _BBA_reserveIfSmall(BBA* bba, Slot sz) {
-  if((bba->cap) < (bba->len) + sz) {
-    if(0 == BA_alloc(bba->ba, &bba->rooti)) return false;
-    bba->len = 0;
-    bba->cap = BLOCK_SIZE;
-  }
-  return true;
+//     root                  root       root
+//       v          ==>        v   ===>   v
+// a <-> node <-> b      a <-> b          a
+Dll* DllRoot_pop(DllRoot* root) {
+  Dll* node = root->start;
+  if(not node) return NULL;
+  if(node->next) root->start = node->next;
+  else           root->start = node->prev;
+  return Dll_remove(node);
 }
-
-// Allocate "aligned" data from the top of the block.
-//
-// WARNING: It is the caller's job to ensure that sz is suitably alligned to
-// their system width.
-U1* BBA_alloc(BBA* bba, Slot sz) {
-  if(!_BBA_reserveIfSmall(bba, sz)) return 0;
-  bba->cap -= sz;
-  U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->cap;
-  return out;
-}
-
-// Allocate "unaligned" data from the bottom of the block.
-U1* BBA_allocUnaligned(BBA* bba, Slot sz) {
-  if(!_BBA_reserveIfSmall(bba, sz)) return 0;
-  U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->len;
-  bba->len += sz;
-  return out;
-}
-
-void BBA_drop(BBA* bba) {
-  BA* ba = bba->ba;
-  while(bba->rooti != BLOCK_END)
-    BA_free(ba, &bba->rooti, &ba->blocks[bba->rooti]);
-  assert(BLOCK_END == bba->rooti);
-  bba->len = 0; bba->cap = 0;
-}
-
-void BBA_free(BBA* bba, void* data, Slot sz) {} // noop
-
-MArena mBBA = (MArena) {
-  .drop           = Role_METHOD(BBA_drop),
-  .alloc          = Role_METHOD(BBA_alloc, Slot),
-  .allocUnaligned = Role_METHOD(BBA_alloc, Slot),
-  .free           = Role_METHOD(BBA_free, void*, Slot),
-};
-
-Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
 
 // #################################
 // # Binary Search Tree
@@ -281,5 +200,88 @@ Bst* Bst_add(Bst** root, Bst* add) {
 }
 
 // #################################
+// # BA: Block Allocator
+
+Dll*     BANode_asDll(BANode* node) { return (Dll*) node; }
+DllRoot* BA_asDllRoot(BA* node)     { return (DllRoot*) node; }
+
+BANode* BA_alloc(BA* ba) {
+  BANode* out = (BANode*) DllRoot_pop(BA_asDllRoot(ba));
+  if(not out) return NULL;
+  ba->len -= 1;
+  return out;
+}
+
+void BA_free(BA* ba, BANode* node) {
+  DllRoot_add(BA_asDllRoot(ba), BANode_asDll(node));
+  ba->len += 1;
+}
+
+void BA_freeAll(BA* ba, BANode* nodes) {
+  FOR_LL(nodes, { BA_free(ba, nodes); })
+}
+
+void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]) {
+  for(Slot i = 0; i < len; i++) {
+    BANode* node = nodes + i;
+    node->block  = blocks + i;
+    BA_free(&civ.ba, node);
+  }
+}
+
+// #################################
+// # BBA: Block Bump Arena
+DEFINE_AS(Arena,  /*as*/Resource);
+
+// BBA BBA_new(BA* ba) { return (BBA) { .ba = ba, .rooti = BLOCK_END}; }
+
+// bool _BBA_reserveIfSmall(BBA* bba, Slot sz) {
+//   if((bba->cap) < (bba->len) + sz) {
+//     if(0 == BA_alloc(bba->ba, &bba->rooti)) return false;
+//     bba->len = 0;
+//     bba->cap = BLOCK_SIZE;
+
+//   return true;
+// }
+// 
+// // Allocate "aligned" data from the top of the block.
+// //
+// // WARNING: It is the caller's job to ensure that sz is suitably alligned to
+// // their system width.
+// U1* BBA_alloc(BBA* bba, Slot sz) {
+//   if(!_BBA_reserveIfSmall(bba, sz)) return 0;
+//   bba->cap -= sz;
+//   U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->cap;
+//   return out;
+// }
+// 
+// // Allocate "unaligned" data from the bottom of the block.
+// U1* BBA_allocUnaligned(BBA* bba, Slot sz) {
+//   if(!_BBA_reserveIfSmall(bba, sz)) return 0;
+//   U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->len;
+//   bba->len += sz;
+//   return out;
+// }
+// 
+// void BBA_drop(BBA* bba) {
+//   BA* ba = bba->ba;
+//   while(bba->rooti != BLOCK_END)
+//     BA_free(ba, &bba->rooti, &ba->blocks[bba->rooti]);
+//   assert(BLOCK_END == bba->rooti);
+//   bba->len = 0; bba->cap = 0;
+// }
+// 
+// void BBA_free(BBA* bba, void* data, Slot sz) {} // noop
+// 
+// MArena mBBA = (MArena) {
+//   .drop           = Role_METHOD(BBA_drop),
+//   .alloc          = Role_METHOD(BBA_alloc, Slot),
+//   .allocUnaligned = Role_METHOD(BBA_alloc, Slot),
+//   .free           = Role_METHOD(BBA_free, void*, Slot),
+// };
+// 
+// Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
+// 
+// #################################
 // # File
-DEFINE_AS(RFile,  /*as*/Resource);
+// DEFINE_AS(RFile,  /*as*/Resource);

@@ -59,12 +59,23 @@ typedef IRef                 ISlot;
 
 // ####
 // # Core Structs
-typedef struct { U1* dat; U2 len;                 } Slc;
-typedef struct { U1* dat; U2 len; U2 cap;         } Buf;
-typedef struct { U1* dat; U2 len; U2 cap; U2 plc; } PlcBuf;
-typedef struct { U1 count; U1 dat[];              } CStr;
-typedef struct { void* next;                        } Sll;
-typedef struct { void* next; void* prev;            } Dll;
+typedef struct { U1* dat; U2 len;                   } Slc;
+typedef struct { U1* dat; U2 len; U2 cap;           } Buf;
+typedef struct { U1* dat; U2 len; U2 cap; U2 plc;   } PlcBuf;
+typedef struct { U1 count; U1 dat[];                } CStr;
+
+typedef struct _Sll {
+  struct _Sll* next;
+  void* dat;
+} Sll;
+
+typedef struct _Dll {
+  struct _Dll* next;
+  struct _Dll* prev;
+  void* dat;
+} Dll;
+
+typedef struct { Dll* start; } DllRoot;
 
 // ####
 // # Core methods
@@ -120,13 +131,50 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
 
 // ##
 // # Sll
+#define FOR_LL(LL, CODE) \
+  while(LL) { CODE; (LL) = (LL)->next; }
+
 void Sll_add(Sll** root, Sll* node);
 Sll* Sll_pop(Sll** root);
 
+
 // ##
 // # Dll
+
+// Add to next: to -> a ==> to -> b -> a
 void Dll_add(Dll* to, Dll* node);
+
+// Pop from next: from -> b -> a ==> from -> a (return b)
+//
+// Note: from->prev is never used, so the following is safe:
+//
+//   Dll* root = ...;
+//   Dll* b = Dll_pop((Dll*)&root);
 Dll* Dll_pop(Dll* from);
+
+// Remove from chain: a -> node -> b ==> a -> b
+Dll* Dll_remove(Dll* node);
+
+// Add to root, preserving prev/next nodes.
+//
+//     root              root
+//       v      ==>        v
+// a <-> b           a <-> node <-> b
+void DllRoot_add(DllRoot* root, Dll* node);
+
+Dll* DllRoot_pop(DllRoot* root);
+
+
+
+// #################################
+// # Binary Search Tree
+typedef struct _Bst {
+  struct _Bst* l; struct _Bst* r;
+  CStr* key;
+} Bst;
+
+I4   Bst_find(Bst** node, Slc slc);
+Bst* Bst_add(Bst** root, Bst* add);
 
 
 // #################################
@@ -170,47 +218,22 @@ Dll* Dll_pop(Dll* from);
 #define BLOCK_SIZE (1<<BLOCK_PO2)
 #define BLOCK_END  0xFF
 typedef struct { U1 dat[BLOCK_SIZE];                             } Block;
-typedef struct { U1 previ; U1 nexti;                             } BANode;
-typedef struct { BANode* nodes; Block* blocks; U1 rooti; U1 cap; } BA;
+typedef struct _BANode {
+  struct _BANode* next; struct _BANode* prev; // Dll
+  Block* block;
+} BANode;
 
-typedef struct {
-  BA* ba;
-  U1 rooti;
-  U2 len; U2 cap;
-} BBA;
+typedef struct { BANode* free; Slot len; } BA;
 
-// Initialize a BA
-void BA_init(BA* ba);
+Dll*     BANode_asDll(BANode* node);
+DllRoot* BA_asDllRoot(BA* ba);
 
-// Allocate a block, updating BlockAllocator and client's root indexes.
-//
-// Go from:
-//   baRoot     -> d -> e -> f
-//   clientRoot -> c -> b -> a
-// To (returning block 'd'):
-//   baRoot     -> e -> f
-//   clientRoot -> d -> c -> b -> a
-Block* BA_alloc(BA* ba, U1* clientRooti);
+BANode* BA_alloc(BA* ba);
+void BA_free(BA* ba, BANode* node);
+void BA_freeAll(BA* ba, BANode* nodes);
 
-// Free a block, updating BlockAllocator and client's root indexes.
-//
-// Go from (freeing c):
-//   clientRoot -> c -> b -> a
-//   baRoot     -> d -> e -> f
-// To:
-//   clientRoot -> b -> a
-//   baRoot     -> c -> d -> e -> f
-void BA_free(BA* ba, uint8_t* clientRooti, Block* b);
-
-// Free all blocks owned by the client.
-//
-// Go from:
-//   clientRoot -> c -> b -> a
-//   baRoot     -> d -> e -> f
-// To:
-//   clientRoot -> END
-//   baRoot     -> a -> b -> c -> d -> e -> f
-void BA_freeAll(BA* ba, U1* clientRooti);
+// Free an array of nodes and blocks. Typically used to initialize BA.
+void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]);
 
 // #################################
 // # Arena Role
@@ -245,20 +268,26 @@ Resource* Arena_asResource(Arena*);
 // This is great for data that just grows and is rarely (or never) freed. It
 // will cause OOM for other workloads unless they are small and the Arena is
 // quickly dropped.
+typedef struct {
+  BA* ba;
+  BANode* node;
+  U2 len; U2 cap;
+} BBA;
+
 Arena BBA_asArena(BBA* b);
 
 void BBA_drop(BBA* bba); // drop whole Arena
-BBA BBA_new(BA* ba);
+// BBA BBA_new(BA* ba);
 
-// Allocate "aligned" data from the top of the block.
-//
-// WARNING: It is the caller's job to ensure that size is suitably alligned to
-// their system width.
-U1* BBA_alloc(BBA* bba, Slot sz);
-
-// Allocate "unaligned" data from the bottom of the block.
-U1* BBA_allocUnaligned(BBA* bba, Slot sz);
-
+// // Allocate "aligned" data from the top of the block.
+// //
+// // WARNING: It is the caller's job to ensure that size is suitably alligned to
+// // their system width.
+// U1* BBA_alloc(BBA* bba, Slot sz);
+// 
+// // Allocate "unaligned" data from the bottom of the block.
+// U1* BBA_allocUnaligned(BBA* bba, Slot sz);
+// 
 // #################################
 // # Civ Global Environment
 
@@ -266,7 +295,7 @@ typedef struct _Fiber {
   struct _Fiber* next;
   struct _Fiber* prev;
   jmp_buf*   errJmp;
-  Arena*     arena;     // Global default arena
+  // Arena*     arena;     // Global default arena
   Slc err;
 } Fiber;
 
@@ -281,76 +310,66 @@ typedef struct {
 
 extern Civ civ;
 
-// #################################
-// # Binary Search Tree
-typedef struct _Bst {
-  struct _Bst* l; struct _Bst* r;
-  CStr* key;
-} Bst;
-
-I4   Bst_find(Bst** node, Slc slc);
-Bst* Bst_add(Bst** root, Bst* add);
-
-// #################################
-// # File
-// Unlike many roles, the File role requires the data structure to follow the
-// below. This is because interacting with files are inherently interacting with
-// buffers.
-//
-// System-specific data can expand on this, such as storing the file name/etc.
-
-#define File_seek_SET  1 // seek from beginning
-#define File_seek_CUR  2 // seek from current position
-#define File_seek_END  3 // seek from end
-
-typedef struct {
-  Ref      pos;   // current position in file. If seek: desired position.
-  Ref      fid;   // file id or reference
-  PlcBuf   buf;   // buffer for reading or writing data
-  U2       code;  // status or error (File_*)
-} File;
-
-typedef struct {
-  // Resource methods
-  bool (*drop) (File* d);
-
-  // Close a file
-  void (*close) (File* d);
-
-  // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
-  void (*open)  (File* d, Slc path, Slot options);
-
-  // Stop async operations (may be noop)
-  void (*stop)  (File* d);
-
-  // Seek in the file whence=File_seek_(SET|CUR|END)
-  void (*seek)  (File* d, ISlot offset, U1 whence);
-
-  // Read from a file into d buffer.
-  void (*read)  (File* d);
-
-  // Write to a file from d buffer.
-  void (*write)(File* d);
-} MFile;
-
-typedef struct { MFile* m; File* d; } RFile;  // Role
-Resource* RFile_asResource(RFile*);
-
-// If set it is a real "file index/id"
-#define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))
-
-#define File_CLOSED   0x00
-
-#define File_SEEKING  0x10
-#define File_READING  0x11
-#define File_WRITING  0x12
-#define File_STOPPING 0x13
-
-#define File_DONE     0xD0
-#define File_STOPPED  0xD1
-#define File_EOF      0xD2
-
-#define File_ERROR    0xE0
-#define File_EIO      0xE2
+// // #################################
+// // # File
+// // Unlike many roles, the File role requires the data structure to follow the
+// // below. This is because interacting with files are inherently interacting with
+// // buffers.
+// //
+// // System-specific data can expand on this, such as storing the file name/etc.
+// 
+// #define File_seek_SET  1 // seek from beginning
+// #define File_seek_CUR  2 // seek from current position
+// #define File_seek_END  3 // seek from end
+// 
+// typedef struct {
+//   Ref      pos;   // current position in file. If seek: desired position.
+//   Ref      fid;   // file id or reference
+//   PlcBuf   buf;   // buffer for reading or writing data
+//   U2       code;  // status or error (File_*)
+// } File;
+// 
+// typedef struct {
+//   // Resource methods
+//   bool (*drop) (File* d);
+// 
+//   // Close a file
+//   void (*close) (File* d);
+// 
+//   // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
+//   void (*open)  (File* d, Slc path, Slot options);
+// 
+//   // Stop async operations (may be noop)
+//   void (*stop)  (File* d);
+// 
+//   // Seek in the file whence=File_seek_(SET|CUR|END)
+//   void (*seek)  (File* d, ISlot offset, U1 whence);
+// 
+//   // Read from a file into d buffer.
+//   void (*read)  (File* d);
+// 
+//   // Write to a file from d buffer.
+//   void (*write)(File* d);
+// } MFile;
+// 
+// typedef struct { MFile* m; File* d; } RFile;  // Role
+// Resource* RFile_asResource(RFile*);
+// 
+// // If set it is a real "file index/id"
+// #define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))
+// 
+// #define File_CLOSED   0x00
+// 
+// #define File_SEEKING  0x10
+// #define File_READING  0x11
+// #define File_WRITING  0x12
+// #define File_STOPPING 0x13
+// 
+// #define File_DONE     0xD0
+// #define File_STOPPED  0xD1
+// #define File_EOF      0xD2
+// 
+// #define File_ERROR    0xE0
+// #define File_EIO      0xE2
 
 #endif // __CIV_H
