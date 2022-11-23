@@ -15,11 +15,15 @@
 
 #include "constants.h"
 
-#if UINTPTR_MAX == 0xFFFF
+
+#if UINTPTR_MAX == 0xFFFFFFFF
 #define RSIZE   4
 #else
 #define RSIZE   8
 #endif
+
+#define ALIGN1      1
+#define ALIGN_SLOT  RSIZE
 
 #define not  !
 #define and  &&
@@ -81,8 +85,7 @@ typedef struct { Dll* start; } DllRoot;
 // # Core methods
 
 // Get the required addition/subtraction to ptr to achieve alignment
-Slot requiredBumpAdd(void* ptr, U2 alignment);
-Slot requiredBumpSub(void* ptr, U2 alignment);
+Slot align(Slot ptr, U2 alignment);
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
@@ -182,16 +185,17 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 #define TEST(NAME) \
   void test_ ## NAME () {              \
-    jmp_buf localErrJmp, expectErrJmp; \
-    civ.fb = &civ.rootFiber;           \
+    jmp_buf localErrJmp;               \
+    Civ_init();                        \
     civ.fb->errJmp = &localErrJmp;     \
-    civ.fb->errJmp = &localErrJmp; \
     eprintf("## Testing " #NAME "...\n"); \
+    eprintf("??? localErrJmp: %X\n", &localErrJmp); \
     if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
 #define END_TEST  }
 
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
+  eprintf("Longjmping to: %X\n", civ.fb->errJmp); \
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
@@ -205,7 +209,7 @@ Bst* Bst_add(Bst** root, Bst* add);
 // # Methods and Roles
 
 // Role Execute: Xr(myRole, meth, a, b) -> myRole.m.meth(myRole.d, a, b)
-#define Xr(R, M, ...)    (R).m.M(&(R).d __VA_OPT__(,) __VA_ARGS__)
+#define Xr(R, M, ...)    (R).m->M((R).d __VA_OPT__(,) __VA_ARGS__)
 
 // Declare role method:
 //   Role_METHOD(myFunc, U1, U2) -> void (*)(void*, U1, U2) myFunc
@@ -215,9 +219,17 @@ Bst* Bst_add(Bst** root, Bst* add);
 // #################################
 // # BA: Block Allocator
 #define BLOCK_PO2  12
-#define BLOCK_SIZE (1<<BLOCK_PO2)
+#define BLOCK_SIZE  (1<<BLOCK_PO2)
+#define BLOCK_AVAIL (BLOCK_SIZE - (sizeof(U2) * 2))
 #define BLOCK_END  0xFF
-typedef struct { U1 dat[BLOCK_SIZE];                             } Block;
+
+typedef struct { U2 bot; U2 top; } BlockInfo;
+
+typedef struct {
+  U1 dat[BLOCK_AVAIL];
+  BlockInfo info;
+} Block;
+
 typedef struct _BANode {
   struct _BANode* next; struct _BANode* prev; // Dll
   Block* block;
@@ -238,13 +250,13 @@ void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]);
 // #################################
 // # Arena Role
 typedef struct {
-  void (*drop)            (void* d);          // drop whole arena
-  void (*alloc)           (void* d, Slot sz); // allocate memory of size
-  void (*allocUnaligned)  (void* d, Slot sz); // ... possibly unaligned.
-  void (*free)            (void* d, void* mem, Slot sz); // free memory of size
+  void  (*drop)            (void* d);
+  void* (*alloc)           (void* d, Slot sz, U2 alignment);
+  void  (*free)            (void* d, void* dat, Slot sz, U2 alignment);
+  Slot  (*maxAlloc)        (void* d);
 } MArena;
 
-typedef struct { MArena m; void* d; } Arena;
+typedef struct { MArena* m; void* d; } Arena;
 
 // #################################
 // # Resource Role
@@ -268,26 +280,24 @@ Resource* Arena_asResource(Arena*);
 // This is great for data that just grows and is rarely (or never) freed. It
 // will cause OOM for other workloads unless they are small and the Arena is
 // quickly dropped.
-typedef struct {
-  BA* ba;
-  BANode* node;
-  U2 len; U2 cap;
-} BBA;
 
-Arena BBA_asArena(BBA* b);
+typedef struct { BA* ba; BANode* dat; } BBA;
 
-void BBA_drop(BBA* bba); // drop whole Arena
-// BBA BBA_new(BA* ba);
+DllRoot* BBA_asDllRoot(BBA* bba);
+Arena    BBA_asArena(BBA* b);
+#define  BBA_block(BBA) ((BBA)->dat->block)
+#define  BBA_info(BBA)  (BBA_block(BBA)->info)
 
-// // Allocate "aligned" data from the top of the block.
-// //
-// // WARNING: It is the caller's job to ensure that size is suitably alligned to
-// // their system width.
-// U1* BBA_alloc(BBA* bba, Slot sz);
-// 
-// // Allocate "unaligned" data from the bottom of the block.
-// U1* BBA_allocUnaligned(BBA* bba, Slot sz);
-// 
+void   BBA_drop(BBA* bba);  // drop whole Arena
+Slot   BBA_spare(BBA* bba); // get spare bytes
+
+void*  BBA_alloc(BBA* bba, Slot sz, U2 alignment);
+void   BBA_free (BBA* bba, void* data, Slot sz, U2 alignment);
+
+Slot   BBA_maxAlloc(void* anything); // actually constant
+
+extern MArena mBBA;
+
 // #################################
 // # Civ Global Environment
 
@@ -309,6 +319,8 @@ typedef struct {
 } Civ;
 
 extern Civ civ;
+
+void Civ_init();
 
 // // #################################
 // // # File

@@ -6,8 +6,17 @@
 
 #define File_FD(F)      ((~File_INDEX) & (F).fid)
 
+void civErrPrinter() { eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat); }
+
+void CivUnix_init(Slot numBlocks) {
+  CivUnix_allocBlocks(numBlocks);
+  civ.civErrPrinter = civErrPrinter;
+  civ.fb->err.len = 0;
+}
+
+
 void CivUnix_drop() {
-  for(Dll* dll; dll = DllRoot_pop(&civUnix.mallocs);) free(dll->dat);
+  for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
 }
 
 void CivUnix_allocBlocks(Slot numBlocks) {
@@ -25,7 +34,6 @@ void CivUnix_allocBlocks(Slot numBlocks) {
 // #################################
 // # Core Types and common methods
 
-void civErrPrinter() { eprintf("!! Error #%X\n", civ.fb->err); }
 
 bool CStr_varAssert(U4 line, U1* STR, U1* LEN) {
   if(1 != strlen(LEN)) {
@@ -37,18 +45,6 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN) {
     return false;
   }
   return true;
-}
-
-void* initCivUnix(Slot numBlocks) {
-  void* mem = malloc(numBlocks * (BLOCK_SIZE + sizeof(BANode)));
-  Block*  blocks = (Block*)mem;
-  BANode* nodes  = (BANode*)(blocks + numBlocks);
-  assert((Slot) nodes == (Slot)mem + (BLOCK_SIZE * numBlocks));
-  BA_freeArray(&civ.ba, numBlocks, nodes, blocks);
-
-  civ.civErrPrinter = civErrPrinter;
-  civ.fb->err.len = 0;
-  return mem;
 }
 
 // void initCivUnix(BANode* nodes, Block* blocks, U1 numBlocks) {

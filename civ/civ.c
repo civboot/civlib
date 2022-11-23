@@ -5,18 +5,21 @@
 
 /*extern*/ jmp_buf* err_jmp = NULL;
 /*extern*/ U2 civErr        = 0;
-/*extern*/ Civ civ          = (Civ) {};
+/*extern*/ Civ civ          = (Civ) {0};
+
+void Civ_init() {
+  civ = (Civ) {0};
+  civ.fb = &civ.rootFiber;
+}
 
 // ####
 // # Core methods
 
-Slot requiredBumpAdd(void* ptr, U2 alignment) {
-  Slot out = alignment - ((Slot)ptr % alignment);
-  return (out == alignment) ? 0 : out;
-}
+#define FIX_ALIGN(A) ((A == 1) ? 1 : 4)
 
-Slot requiredBumpSub(void* ptr, U2 alignment) {
-  return (Slot)ptr % alignment;
+Slot align(Slot ptr, U2 alignment) {
+  U2 need = alignment - (ptr % alignment);
+  return (need == alignment) ? ptr : (ptr + need);
 }
 
 // ##
@@ -203,7 +206,7 @@ Bst* Bst_add(Bst** root, Bst* add) {
 // # BA: Block Allocator
 
 Dll*     BANode_asDll(BANode* node) { return (Dll*) node; }
-DllRoot* BA_asDllRoot(BA* node)     { return (DllRoot*) node; }
+DllRoot* BA_asDllRoot(BA* node)     { return (DllRoot*) &node->free; }
 
 BANode* BA_alloc(BA* ba) {
   BANode* out = (BANode*) DllRoot_pop(BA_asDllRoot(ba));
@@ -218,7 +221,11 @@ void BA_free(BA* ba, BANode* node) {
 }
 
 void BA_freeAll(BA* ba, BANode* nodes) {
-  FOR_LL(nodes, { BA_free(ba, nodes); })
+  while(nodes) {
+    BANode* freeing = nodes;
+    nodes = nodes->next;
+    BA_free(ba, freeing);
+  }
 }
 
 void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]) {
@@ -231,57 +238,103 @@ void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]) {
 
 // #################################
 // # BBA: Block Bump Arena
+DllRoot* BBA_asDllRoot(BBA* bba) { return (DllRoot*)&bba->dat; }
+
 DEFINE_AS(Arena,  /*as*/Resource);
 
-// BBA BBA_new(BA* ba) { return (BBA) { .ba = ba, .rooti = BLOCK_END}; }
+void BBA_drop(BBA* bba) {
+  BA_freeAll(bba->ba, bba->dat);
+  bba->dat = NULL;
+}
 
-// bool _BBA_reserveIfSmall(BBA* bba, Slot sz) {
-//   if((bba->cap) < (bba->len) + sz) {
-//     if(0 == BA_alloc(bba->ba, &bba->rooti)) return false;
-//     bba->len = 0;
-//     bba->cap = BLOCK_SIZE;
+// Get spare bytes
+Slot BBA_spare(BBA* bba) {
+  BlockInfo* info = &BBA_info(bba);
+  return info->top - info->bot;
+}
 
-//   return true;
-// }
-// 
-// // Allocate "aligned" data from the top of the block.
-// //
-// // WARNING: It is the caller's job to ensure that sz is suitably alligned to
-// // their system width.
-// U1* BBA_alloc(BBA* bba, Slot sz) {
-//   if(!_BBA_reserveIfSmall(bba, sz)) return 0;
-//   bba->cap -= sz;
-//   U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->cap;
-//   return out;
-// }
-// 
-// // Allocate "unaligned" data from the bottom of the block.
-// U1* BBA_allocUnaligned(BBA* bba, Slot sz) {
-//   if(!_BBA_reserveIfSmall(bba, sz)) return 0;
-//   U1* out = ((U1*)&bba->ba->blocks[bba->rooti]) + bba->len;
-//   bba->len += sz;
-//   return out;
-// }
-// 
-// void BBA_drop(BBA* bba) {
-//   BA* ba = bba->ba;
-//   while(bba->rooti != BLOCK_END)
-//     BA_free(ba, &bba->rooti, &ba->blocks[bba->rooti]);
-//   assert(BLOCK_END == bba->rooti);
-//   bba->len = 0; bba->cap = 0;
-// }
-// 
-// void BBA_free(BBA* bba, void* data, Slot sz) {} // noop
-// 
-// MArena mBBA = (MArena) {
-//   .drop           = Role_METHOD(BBA_drop),
-//   .alloc          = Role_METHOD(BBA_alloc, Slot),
-//   .allocUnaligned = Role_METHOD(BBA_alloc, Slot),
-//   .free           = Role_METHOD(BBA_free, void*, Slot),
-// };
-// 
-// Arena BBA_asArena(BBA* bba) { return (Arena) { .m = mBBA, .d = bba }; }
-// 
+static Block* BBA_allocBlock(BBA* bba) {
+  BANode* node = BA_alloc(bba->ba);
+  if(not node) return NULL;
+  BlockInfo* info = &(node->block->info);
+  info->bot = 0;
+  info->top = BLOCK_AVAIL;
+  DllRoot_add(BBA_asDllRoot(bba), BANode_asDll(node));
+  return node->block;
+}
+
+// Return block that can handle the growth or NULL
+Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
+  if(not bba->dat)
+    return BBA_allocBlock(bba);
+  Block* block = BBA_block(bba);
+  if(block->info.bot + grow > block->info.top)
+      return BBA_allocBlock(bba);
+  return block;
+}
+
+
+void* BBA_alloc(BBA* bba, Slot sz, U2 alignment) {
+  ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
+  if(1 == alignment) {
+    // Grow up
+    Block* block = _allocBlockIfRequired(bba, sz);
+    eprintf("??? got block: %X  bot=%u top=%u\n", block, block->info.bot, block->info.top);
+    if(not block) return NULL;
+    U1* out = (U1*)block + block->info.bot;
+    block->info.bot += sz;
+    return out;
+  }
+  // Else grow down (aligned)
+  sz = align(sz, FIX_ALIGN(alignment));
+  Block* block = _allocBlockIfRequired(bba, sz);
+  if(not block) return NULL;
+  U2* top = &(block->info.top);
+  *top -= sz;
+  return (U1*)block + (*top);
+}
+
+void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
+  eprintf("??? what?\n");
+  ASSERT(bba->dat, "Free empty BBA");
+  eprintf("bba=%X, data=%X, sz=%u, align=%u\n", bba, data, sz, alignment);
+
+  Block* block = BBA_block(bba);
+  BlockInfo* info = &block->info;
+  ASSERT(( (U1*)block <= (U1*)data )
+         and
+         ( (U1*)data + sz <= (U1*)block + BLOCK_AVAIL ),
+         "unordered free: block bounds");
+  U2 plc = (U2)((U1*)data - (U1*)block);
+  eprintf("??? plc=%X\n", plc);
+
+  if(1 == alignment) {
+    eprintf("??? here\n");
+    ASSERT(plc == info->bot - sz, "unordered free: sz");
+    info->bot = plc;
+  } else {
+    eprintf("freeing it bro\n");
+    sz = align(sz, FIX_ALIGN(alignment));
+    ASSERT(plc <= info->top, "unordered free: sz");
+    info->top = plc + sz;
+  }
+
+  if(info->top - info->bot == BLOCK_AVAIL) {
+    BA_free(bba->ba, (BANode*)DllRoot_pop(BBA_asDllRoot(bba)));
+  }
+}
+
+Slot BBA_maxAlloc(void* anything) { return BLOCK_AVAIL; }
+
+/*extern*/ MArena mBBA = (MArena) {
+  .drop  = Role_METHOD(BBA_drop),
+  .alloc = Role_METHODR(BBA_alloc, /*ret*/void*, Slot,  U2),
+  .free  = Role_METHOD(BBA_free,                 void*, Slot, U2),
+  .maxAlloc = BBA_maxAlloc,
+};
+
+Arena BBA_asArena(BBA* d) { return (Arena) { .m = &mBBA, .d = d }; }
+
 // #################################
 // # File
 // DEFINE_AS(RFile,  /*as*/Resource);

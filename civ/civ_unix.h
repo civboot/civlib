@@ -6,8 +6,9 @@
 
 #define File_FD(F)      ((~File_INDEX) & (F).fid)
 
-#define TEST_UNIX(NAME, numBlocks)  TEST(NAME)  \
-    CivUnix_allocBlocks(numBlocks);
+#define TEST_UNIX(NAME, numBlocks) \
+  TEST(NAME)                       \
+  CivUnix_init(numBlocks);
 
 
 #define END_TEST_UNIX \
@@ -19,11 +20,11 @@ typedef struct {
 
 extern CivUnix civUnix;;
 
+void CivUnix_init(Slot numBlocks);
 void CivUnix_drop();
 void CivUnix_allocBlocks(Slot numBlocks);
 
 
-void* initCivUnix(Slot numBlocks);
 
 // #define File_RDWR      O_RDWR
 // #define File_RDONLY    O_RDONLY

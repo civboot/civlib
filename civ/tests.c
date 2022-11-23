@@ -25,11 +25,10 @@ TEST(basic)
   TASSERT_EQ(0x2345,       ftBE(dat + 1, 2));
   TASSERT_EQ(0x6789ABCD,   ftBE(dat + 3, 4));
 
-  TASSERT_EQ(3, requiredBumpAdd((void*)1, 4));
-  TASSERT_EQ(2, requiredBumpAdd((void*)2, 4));
-  TASSERT_EQ(0, requiredBumpSub((void*)8,  4));
-  TASSERT_EQ(1, requiredBumpSub((void*)9,  4));
-  TASSERT_EQ(2, requiredBumpSub((void*)10, 4));
+  TASSERT_EQ(0, align(0, 4));
+  TASSERT_EQ(4, align(1, 4));
+  TASSERT_EQ(4, align(2, 4));
+  TASSERT_EQ(4, align(4, 4));
 END_TEST
 
 TEST(slc)
@@ -132,7 +131,8 @@ END_TEST
 
 #define FIRST_BLOCK  (civUnix.mallocs.start->dat)
 
-TEST_UNIX(baNew, 5)
+TEST_UNIX(ba, 5)
+  TASSERT_EQ(sizeof(Block), BLOCK_SIZE);
   TASSERT_EQ(5, civ.ba.len);
   BANode* free = civ.ba.free;
   TASSERT_EQ(free->block - 4, FIRST_BLOCK);
@@ -140,17 +140,33 @@ TEST_UNIX(baNew, 5)
 END_TEST_UNIX
 
 TEST_UNIX(bba, 5)
-//   BBA bba = BBA_new(&civ.ba);
-// 
-//   BANode* nodes = civ.ba.nodes;
-//   TASSERT_EQ((U1*) civ.ba.blocks + BLOCK_SIZE - 12  , BBA_alloc(&bba, 12));
-//   TASSERT_EQ((U1*)&civ.ba.blocks[1]      , BBA_alloc(&bba, BLOCK_SIZE));
-//   TASSERT_EQ((U1*)&civ.ba.blocks[2]      , BBA_allocUnaligned(&bba, 13));
-//   TASSERT_EQ((U1*)&civ.ba.blocks[2] + 13 , BBA_allocUnaligned(&bba, 25));
-//   TASSERT_EQ((U1*)&civ.ba.blocks[3]      , BBA_allocUnaligned(&bba, BLOCK_SIZE - 20));
-//   TASSERT_EQ(NULL                        , BBA_alloc(&bba, BLOCK_SIZE));
-//   BBA_drop(&bba);
-//   TASSERT_EQ((U1*) civ.ba.blocks         , BBA_allocUnaligned(&bba, 12));
+  BBA bba = {.ba = &civ.ba};
+  TASSERT_EQ(5, civ.ba.len);
+
+  U1* bytes = BBA_alloc(&bba, 5, ALIGN1);
+  bytes[0] = 'h'; bytes[1] = 'i';
+  Block* block = BBA_block(&bba);
+  TASSERT_EQ(5, block->info.bot);
+  TASSERT_EQ((U1*)block, bytes);
+
+  U1* bytes2 = BBA_alloc(&bba, 12, ALIGN1);
+  TASSERT_EQ(17, block->info.bot);
+  TASSERT_EQ(bytes + 5, bytes2);
+  BBA_free(&bba, bytes2, 12, 1);
+
+  U4* v1 = BBA_alloc(&bba, 4, ALIGN_SLOT);
+  TASSERT_EQ((U1*)block + BLOCK_AVAIL - 4, (U1*) v1);
+  *v1 = 0x4444;
+
+  TASSERT_EQ(BLOCK_AVAIL - 4, BBA_info(&bba).top);
+  Arena a = BBA_asArena(&bba); // testing out arenas
+  eprintf("??? Align slot=%u  uintMax=%X\n", ALIGN_SLOT, UINTPTR_MAX);
+  Xr(a,free, v1, 4, ALIGN_SLOT);
+  TASSERT_EQ(BLOCK_AVAIL, BBA_info(&bba).top);
+
+  BBA_drop(&bba);
+
+  TASSERT_EQ(5, civ.ba.len);
 END_TEST_UNIX
 
 // TEST(file)
@@ -187,7 +203,7 @@ int main() {
   test_sll();
   test_dll();
   test_bst();
-  test_baNew();
+  test_ba();
   test_bba();
   // test_file();
   eprintf("# Tests All Pass\n");
