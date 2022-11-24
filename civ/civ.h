@@ -89,6 +89,17 @@ Slot align(Slot ptr, U2 alignment);
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
+// Big endian store the largest values first. They are frequently used for
+// networking code or where bytes are packed together without being aligned.
+//
+// The naming is confusing, since "big endian" makes you think the "big" value
+// would be at the "end". This is not the case. The name was originally derived
+// from Gulliver's travels where the "Liliputians", aka the Little
+// Putians(Endians), break the little part of the egg on their "head". For an
+// array, the start is also called the head. The Liliputians went to war with
+// their neighbors (who broke the big side of the egg on their head) due to the
+// difference of this custom.  Similarily, hardware architects at the dawn of
+// computing were going to war over big/little endianness.
 U4   ftBE(U1* p, Slot size);
 void srBE(U1* p, Slot size, U4 value);
 
@@ -99,8 +110,9 @@ Ref Ref_min(Ref a, Ref b);
 U4  U4_max(U4 a, U4 b);
 Ref Ref_max(Ref a, Ref b);
 
-// ##
-// # Slc
+// #################################
+// # Slc: data slice of up to 64KiB indexes (0x10,000)
+// Slice is just a data pointer and a len.
 Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
@@ -110,8 +122,10 @@ I4   Slc_cmp(Slc a, Slc b);
     .len = sizeof((U1[]){__VA_ARGS__}) \
   }
 
-// ##
-// # Buf + PlcBuf
+// #################################
+// # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
+// Buffers are a data pointer, a length (used data) and a capacity
+// PlcBuf has an additional field "plc" to keep place while processing a buffer.
 Slc* Buf_asSlc(Buf*);
 Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
@@ -132,17 +146,13 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
   static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
 
-// ##
-// # Sll
-#define FOR_LL(LL, CODE) \
-  while(LL) { CODE; (LL) = (LL)->next; }
-
+// #################################
+// # Sll: Singly Linked List
 void Sll_add(Sll** root, Sll* node);
 Sll* Sll_pop(Sll** root);
 
-
-// ##
-// # Dll
+// #################################
+// # Dll: Doubly Linked List
 
 // Add to next: to -> a ==> to -> b -> a
 void Dll_add(Dll* to, Dll* node);
