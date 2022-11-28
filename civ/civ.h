@@ -1,3 +1,6 @@
+// civc header file.
+//
+// version: 0.0.1
 #ifndef __CIV_H
 #define __CIV_H
 

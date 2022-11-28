@@ -1,54 +1,80 @@
 [h1]civc: civboot C library ([r]http://civboot.org[/])[/]
 
-civc is a small C library embodying Civboot's software design principles.
+civc is a small C library embodying Civboot's software design principles. It is
+primarily to bootstrap @fngi, but is made available if others would like to
+experiment with similar minimalist software stacks in C. Installation is done
+by simply copying the `civ` directory and including the relevant files for your
+program.
 
-In Civboot, the language C is primarily used as a bootstrapper to fngi and to
-extend fngi when running on unix-like environments. In order to do this, the
-following must be available to the fngi compiler phases:
+The fngi runtime depends on the following, which are provided by civc: [+]
+* A 0x1000 byte (4KiB)  block allocator, permitting allocating and freeing
+  single blocks without memory fragmentation.
+* A basic arena allocator allowing allocation and freeing of both aligned and
+  non-aligned memory.
+* A File Role type, permitting reading and writing to byte stream resources
+  through standardized method pointer offsets (see Role section).
+* Core data types including slice, buffers, counted strings, single and double
+  linked lists, and binary search trees -- as well as common methods and safe
+  type conversion functions.
+* A basic concept of Fibers, allowing for implementing a cooperatively
+  scheduled system on top.
+* A global environment for the allocated values.
+[/]
 
-- A 0x1000 byte (4KiB)  block allocator, permitting allocating and freeing single blocks without memory fragmentation.
-- A basic arena allocator allowing allocation and freeing of both aligned and non-aligned memory.
-- A File Role type, permitting reading and writing to byte stream resources through standardized method pointer offsets (see Roles).
-- Core data types including slice, buffers, counted strings, single and double linked lists, and binary search trees.
-- A basic concept of Fibers, allowing for implementing a cooperatively scheduled system on top.
-- A global environment for the allocated values.
+[h2]Data Inheritance[/]
 
-civc makes use of several simple type constructions that are expressible (but not ergonomic) in C. This includes Roles and single data inheritance.
+Inheritance in civc is simple. If the beginning of your struct is laid out
+identically to another struct, then it [i]can[i] be a child of that struct and
+the pointer can safely be converted. For example:
 
-Data Inheritance
-
-Inheritance is simpe. If the begging of your struct is laid out identically to another type then it is a child of that struct and the pointer can safely be converted. For example
-
+[#]
 struct A { int a; };
 struct B { int a; int b; }
+[#]
 
-A pointer of type B can be converted safely to a pointer of type A, since B contains all of A's fields. We therefore write the function
-
+A pointer of type B can be converted safely to a pointer of type A, since B
+contains all of A's fields. We therefore write the function:
+[#]
 A* B_asA(B* b) { return (A*)b; }
+[#]
 
-Converting the other way (from A to B) is not safe and should not be written.
+["] Converting the other way (from A to B) is not safe and should not be
+    written.
+[/]
 
-This is most commonly used for child structs of data structures like linked lists. Being able to convert pointer types allows us to write logic for these types once and reuse it for any other shape of the payload. Writing the safe conversions helps prevent us from accidentally doing invalid conversions.
+This is most commonly used for child structs of data structures like linked
+lists. Being able to convert pointer types allows us to write logic for these
+types once and reuse it for any other shape of the payload. Writing the safe
+conversions helps prevent us from accidentally doing invalid conversions.
 
-Role
+[h2]Role[/]
 
-Roles allow cheap abstractions for things like allocating, file reading, or other behavior with a common API but many possible implementations and data layouts depending on the hardware and use case.
+Roles allow cheap abstractions for things like allocating, file reading, or
+other behavior with a common API but many possible implementations and data
+layouts depending on the hardware and use case.
 
-An instance of a Role is composed of two things:
-- A pointer to a global struct value who's members are pointers to functions (aka methods).
-- A pointer to that instance's data.
+["] Roles are very similar to interfaces in other languages, but boiled down to
+    the most minimal possible implementation.
+[/]
+
+An instance of a Role is composed of two things: [+]
+* A pointer to a global struct value who's members are pointers to functions
+  (aka methods).
+* A pointer to that instance's data.
+[/]
 
 In code this simply looks like:
-
+[#]
 // methods
 typedef struct {
-  void (*add)(void* self, int a);
+  void (*add)(void* self, int a); // add method pointer
   ... other methods
-} MExampleRole; 
+} MExampleRole;
 
-typedef struct {int a;} OneData;
+typedef struct {int a;} ExampleInstance;
 
-void OneData_add(OneData* self, int a) {
+// Example method implementation
+void ExampleInstance_add(ExampleInstance* self, int a) {
   self->a += a;
 }
 
@@ -57,35 +83,84 @@ typedef struct {
   void* d;
 } ExampleRole;
 
-... Initialize it and define conversion.
+const MExampleRole mExampleInstance =
+(MExampleRole) {
+  .add  = Role_METHOD(ExampleInstance_add, int a),
+};
 
-It's a fair amount of boilerplate in C, but it is EXTREMELY simple and performant. Also, using a role is much easier than defining one, which is good since they are used extensively.
+ExampleRole ExampleInstance_asExampleRole(ExampleInstance* d) {
+  return (ExampleRole) { .m = &mExampleInstance, .d = d };
+}
+[#]
 
-Differences with "normal" C
+The role can then be used like:
+[#]
+ExampleInstance d = {0};
+ExampleInstance_add(&d, 4);
+ExampleRole r = ExampleInstance_asExampleRole(&d);
+Xr(r, add, 4); // macro to call role method add
+assert(d.a == 8);
+[#]
 
-The Civc software stack shares much of the C design philosophy. This includes control over memory layout and management as a central element, as well as bitwise operations and logic. Unlike C, it defines a few basic data types and algorithms for manipulating them in it's std library. 
+It's a fair amount of boilerplate in C, but it is EXTREMELY simple and
+performant. Also, using a role is much easier than defining one, which is good
+since they are used extensively.
 
-The C std library has APIs that are heavily system dependant and is very tied to the unix philosophy and syscall APIs, which include hardware-heavy technology like virtual memory, preemptive multitasking and byte buffers. In contrast, civc provides only a block allocator, cooperative multitasking and block/sector passing.
+["] Since a role is only two pointers, best practice is to take them by value
+    (not by pointer).
+[/]
 
-civc is built to run on simpler hardware, with suitable abstractions (Roles) for running on more powerful hardware. Core types can work with small allocators while still working fine with larger allocators as well.
+[h2]Differences with "normal" C[/]
 
-More concerns
-- C has no generic resource encapsulation. Civc uses Roles for this, allowing for implementing common behaviors like reading an entire file for any kind of file object.
-- Dynamic memory management practically requires virtual memory, and therefore cannot be implemented on minimal hardware. Civc's core types only require a block allocator, so can be implemented on almost any hardware. Civc also uses a Role object for it's arena allocators, allowing a range of possibilities for their implementation depending on the hardware or use-case.
-- Because civc is block-based, passing blocks of memory between processes should be trivial to implement at the kernel level (the kernel can keep track of who owns what block). Passing blocks and sectors of memory is much more efficient than passing bytes. While such a thing is possible in C, it is far from simple.
-- Core types typically have attributes like length and capacity included, and can be safely converted between each other. This reduces programmer error and permits efficient re-use of code.
+The civc software stack (fngi) shares much of the C design philosophy. This
+includes control over memory layout and management as a central element, as
+well as imperative bitwise operations and logic. Unlike C, it defines a few
+basic data types and algorithms for manipulating them in it's std library.
 
-Growth of a new language
+The C std library has APIs that are heavily system dependant and are very tied
+to the unix philosophy and syscall APIs, which include hardware-heavy
+technology like virtual memory (handling fragmentation in hardware), preemptive
+multitasking and byte buffer streams. In contrast, civc provides only a block
+allocator, cooperative multitasking and block/sector passing.
 
-The primary purpose of civc is to provide a tested foundation for the fngi language. Like C, fngi is low level. Unlike C, fngi's macros are powerful enough to inspect types and alter it's syntax. This means that it can easily build the Role types in a library using macros.
+civc is built to run on simpler hardware, with suitable abstractions (Roles)
+for running on more powerful hardware. Core types can work with small
+allocators while still working fine with larger allocators as well.
 
-Besides civc, which itself is a very small set of data structures, fngi is intended to be a very minimalist language to bootstrap.
+More details: [+]
+* C has no generic resource encapsulation. Civc uses Roles for this, allowing
+  for implementing common behaviors like reading an entire file for any kind of
+  file-like object.
+* Dynamic memory management in C practically requires virtual memory, and
+  therefore cannot be implemented on minimal hardware. Civc's core types only
+  require a block allocator, so can be implemented on almost any hardware. Civc
+  also uses a Role object for it's arena allocators, allowing a range of
+  possibilities for their implementation depending on the hardware or use-case.
+* Because civc is block-based, passing blocks of memory between processes
+  should be trivial to implement at the kernel level (the kernel can keep track
+  of who owns what block). Passing blocks and sectors of memory is much more
+  efficient than passing bytes. While such a thing is possible in C, it is far
+  from simple.
+* Core types typically have attributes like length and capacity included, and
+  can be safely converted between each other. This reduces programmer error and
+  permits efficient re-use of code.
+[/]
 
-[h1]License[/]
+[h2]Growth of a new language[/]
+
+The primary purpose of civc is to provide a tested foundation for the @fngi
+language. Like C, fngi is low level. Unlike C, fngi's macros are powerful
+enough to inspect types and alter the syntax of the language inline. This means
+that it can easily build the Role types in a library using macros.
+
+Besides civc, which itself is a very small set of data structures, fngi is
+intended to be a very minimalist language to bootstrap, requring only about
+1000 lines of C beyond what is in civc (which itself is very minimalistic).
+
+[h2]License[/]
 civc is part of the @Civboot project and is released to the public domain or
 licensed MIT under your discression. Modify this directory in any way you wish.
 Contributions are welcome.
 
-["]Version 0.0.1[/]
-
 [t set=Civboot r=https://civboot.org]Civboot[/]
+[t set=fngi r=https://github.com/civboot/fngi]fngi[/]
