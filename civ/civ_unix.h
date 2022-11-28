@@ -24,21 +24,24 @@ void CivUnix_init(Slot numBlocks);
 void CivUnix_drop();
 void CivUnix_allocBlocks(Slot numBlocks);
 
+// File
 
+extern const MFile mFile;
 
-// #define File_RDWR      O_RDWR
-// #define File_RDONLY    O_RDONLY
-// #define File_WRONLY    O_WRONLY
-// #define File_TRUNC     O_TRUNC
-// 
-// File File_malloc(U4 bufCap);
-// void File_readAll(File* f);
-// 
-// int File_handleErr(File* f, int res);
-// bool File_drop(File* f);
-// void File_open(File* f, Slc s, Slot options);
-// void File_close(File* f);
-// void File_read(File* f);
-// RFile File_asRFile(File* d);
+#define File_RDWR      O_RDWR
+#define File_RDONLY    O_RDONLY
+#define File_WRONLY    O_WRONLY
+#define File_TRUNC     O_TRUNC
+
+File File_malloc(U4 bufCap); // only use in tests
+File File_new(PlcBuf buf);
+void File_readAll(File* f);
+
+int File_handleErr(File* f, int res);
+bool File_drop(File* f);
+void File_open(File* f, Slc s, Slot options);
+void File_close(File* f);
+void File_read(File* f);
+RFile File_asRFile(File* d);
 
 #endif // __CIV_UNIX_H

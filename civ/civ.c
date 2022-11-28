@@ -76,10 +76,23 @@ DEFINE_AS(Buf,    /*as*/Slc);
 DEFINE_AS(PlcBuf, /*as*/Slc);
 DEFINE_AS(PlcBuf, /*as*/Buf);
 
-void Buf_ntCopy(Buf* b, U1* s) {
-  b->len = strlen(s);
-  ASSERT(b->cap >= b->len, "Buf_ntCopy: copy too large");
-  memcpy(b->dat, s, b->len);
+Buf Buf_new(Arena arena, U2 cap) {
+  return (Buf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap, };
+}
+
+PlcBuf PlcBuf_new(Arena arena, U2 cap) {
+  return (PlcBuf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap };
+}
+
+bool Buf_extend(Buf* b, Slc s) {
+  if(b->cap < b->len + s.len) return true;
+  memcpy(b->dat + b->len, s.dat, s.len);
+  b->len += s.len;
+  return false;
+}
+
+bool Buf_extendNt(Buf* b, U1* s) {
+  return Buf_extend(b, Slc_frNt(s));
 }
 
 // ##
@@ -326,7 +339,7 @@ void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
 
 Slot BBA_maxAlloc(void* anything) { return BLOCK_AVAIL; }
 
-/*extern*/ MArena mBBA = (MArena) {
+/*extern*/ const MArena mBBA = (MArena) {
   .drop  = Role_METHOD(BBA_drop),
   .alloc = Role_METHODR(BBA_alloc, /*ret*/void*, Slot,  U2),
   .free  = Role_METHOD(BBA_free,                 void*, Slot, U2),

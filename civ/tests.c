@@ -169,31 +169,28 @@ TEST_UNIX(bba, 5)
   TASSERT_EQ(5, civ.ba.len);
 END_TEST_UNIX
 
-// TEST(file)
-//   File f = (File) {
-//     .buf = (PlcBuf) { .dat = malloc(20), .cap = 20 },
-//     .code = File_CLOSED,
-//   };
-//   File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
-//   assert(f.code == File_DONE);
-//   File_readAll(&f);
-//   assert(f.buf.len == 20); assert(f.code == File_DONE);
-//   assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
-// 
-//   File_readAll(&f);
-//   assert(f.buf.len == 20); assert(f.code == File_DONE);
-//   assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
-// 
-//   File_readAll(&f);
-//   assert(f.buf.len == 20); assert(f.code == File_DONE);
-//   assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
-// 
-//   File_readAll(&f);
-//   assert(f.buf.len == 2); assert(f.code == File_EOF);
-//   assert(0 == memcmp(f.buf.dat, "\n\n", 2));
-//   File_close(&f);
-//   free(f.buf.dat);
-// END_TEST
+TEST(file)
+  File f = File_malloc(20);
+  File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
+  assert(f.code == File_DONE);
+  File_readAll(&f);
+  assert(f.buf.len == 20); assert(f.code == File_DONE);
+  assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
+
+  File_readAll(&f);
+  assert(f.buf.len == 20); assert(f.code == File_DONE);
+  assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
+
+  File_readAll(&f);
+  assert(f.buf.len == 20); assert(f.code == File_DONE);
+  assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
+
+  File_readAll(&f);
+  assert(f.buf.len == 2); assert(f.code == File_EOF);
+  assert(0 == memcmp(f.buf.dat, "\n\n", 2));
+  File_close(&f);
+  free(f.buf.dat);
+END_TEST
 
 
 int main() {
@@ -205,7 +202,7 @@ int main() {
   test_bst();
   test_ba();
   test_bba();
-  // test_file();
+  test_file();
   eprintf("# Tests All Pass\n");
   return 0;
 }

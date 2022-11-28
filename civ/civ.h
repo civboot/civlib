@@ -134,6 +134,10 @@ Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
 void Buf_ntCopy(Buf* b, U1* s);
 
+// Attempt to extend Buf. Return true if there is not enough space.
+bool Buf_extend(Buf* b, Slc s);
+bool Buf_extendNt(Buf* b, U1* s);
+
 // CStr
 bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
 
@@ -180,8 +184,6 @@ void DllRoot_add(DllRoot* root, Dll* node);
 
 Dll* DllRoot_pop(DllRoot* root);
 
-
-
 // #################################
 // # Binary Search Tree
 typedef struct _Bst {
@@ -191,7 +193,6 @@ typedef struct _Bst {
 
 I4   Bst_find(Bst** node, Slc slc);
 Bst* Bst_add(Bst** root, Bst* add);
-
 
 // #################################
 // # Error Handling and Testing
@@ -269,7 +270,11 @@ typedef struct {
   Slot  (*maxAlloc)        (void* d);
 } MArena;
 
-typedef struct { MArena* m; void* d; } Arena;
+typedef struct { const MArena* m; void* d; } Arena;
+
+// Methods that depend on arena
+Buf    Buf_new(Arena arena, U2 cap); // Note: check that buf.dat != NULL
+PlcBuf PlcBuf_new(Arena arena, U2 cap);
 
 // #################################
 // # Resource Role
@@ -282,7 +287,7 @@ typedef struct {
   bool (*drop)            (void* d, Arena* a);
 } MResource;
 
-typedef struct { MResource m; void* d; } Resource;
+typedef struct { const MResource* m; void* d; } Resource;
 Resource* Arena_asResource(Arena*);
 
 // #################################
@@ -309,7 +314,7 @@ void   BBA_free (BBA* bba, void* data, Slot sz, U2 alignment);
 
 Slot   BBA_maxAlloc(void* anything); // actually constant
 
-extern MArena mBBA;
+extern const MArena mBBA;
 
 // #################################
 // # Civ Global Environment
@@ -318,7 +323,7 @@ typedef struct _Fiber {
   struct _Fiber* next;
   struct _Fiber* prev;
   jmp_buf*   errJmp;
-  // Arena*     arena;     // Global default arena
+  Arena*     arena;     // Global default arena
   Slc err;
 } Fiber;
 
@@ -335,66 +340,66 @@ extern Civ civ;
 
 void Civ_init();
 
-// // #################################
-// // # File
-// // Unlike many roles, the File role requires the data structure to follow the
-// // below. This is because interacting with files are inherently interacting with
-// // buffers.
-// //
-// // System-specific data can expand on this, such as storing the file name/etc.
-// 
-// #define File_seek_SET  1 // seek from beginning
-// #define File_seek_CUR  2 // seek from current position
-// #define File_seek_END  3 // seek from end
-// 
-// typedef struct {
-//   Ref      pos;   // current position in file. If seek: desired position.
-//   Ref      fid;   // file id or reference
-//   PlcBuf   buf;   // buffer for reading or writing data
-//   U2       code;  // status or error (File_*)
-// } File;
-// 
-// typedef struct {
-//   // Resource methods
-//   bool (*drop) (File* d);
-// 
-//   // Close a file
-//   void (*close) (File* d);
-// 
-//   // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
-//   void (*open)  (File* d, Slc path, Slot options);
-// 
-//   // Stop async operations (may be noop)
-//   void (*stop)  (File* d);
-// 
-//   // Seek in the file whence=File_seek_(SET|CUR|END)
-//   void (*seek)  (File* d, ISlot offset, U1 whence);
-// 
-//   // Read from a file into d buffer.
-//   void (*read)  (File* d);
-// 
-//   // Write to a file from d buffer.
-//   void (*write)(File* d);
-// } MFile;
-// 
-// typedef struct { MFile* m; File* d; } RFile;  // Role
-// Resource* RFile_asResource(RFile*);
-// 
-// // If set it is a real "file index/id"
-// #define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))
-// 
-// #define File_CLOSED   0x00
-// 
-// #define File_SEEKING  0x10
-// #define File_READING  0x11
-// #define File_WRITING  0x12
-// #define File_STOPPING 0x13
-// 
-// #define File_DONE     0xD0
-// #define File_STOPPED  0xD1
-// #define File_EOF      0xD2
-// 
-// #define File_ERROR    0xE0
-// #define File_EIO      0xE2
+// #################################
+// # File
+// Unlike many roles, the File role requires the data structure to follow the
+// below. This is because interacting with files are inherently interacting with
+// buffers.
+//
+// System-specific data can expand on this, such as storing the file name/etc
+// as a child-class of File.
 
+#define File_seek_SET  1 // seek from beginning
+#define File_seek_CUR  2 // seek from current position
+#define File_seek_END  3 // seek from end
+
+typedef struct {
+  Ref      pos;   // current position in file. If seek: desired position.
+  Ref      fid;   // file id or reference
+  PlcBuf   buf;   // buffer for reading or writing data
+  U2       code;  // status or error (File_*)
+} File;
+
+typedef struct {
+  // Resource methods
+  bool (*drop) (File* d);
+
+  // Close a file
+  void (*close) (File* d);
+
+  // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
+  void (*open)  (File* d, Slc path, Slot options);
+
+  // Stop async operations (may be noop)
+  void (*stop)  (File* d);
+
+  // Seek in the file whence=File_seek_(SET|CUR|END)
+  void (*seek)  (File* d, ISlot offset, U1 whence);
+
+  // Read from a file into d buffer.
+  void (*read)  (File* d);
+
+  // Write to a file from d buffer.
+  void (*write)(File* d);
+} MFile;
+
+typedef struct { const MFile* m; File* d; } RFile;  // Role
+Resource* RFile_asResource(RFile*);
+
+// If set it is a real "file index/id"
+#define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))
+
+#define File_CLOSED   0x00
+
+#define File_SEEKING  0x10
+#define File_READING  0x11
+#define File_WRITING  0x12
+#define File_STOPPING 0x13
+
+#define File_DONE     0xD0
+#define File_STOPPED  0xD1
+#define File_EOF      0xD2
+
+#define File_ERROR    0xE0
+#define File_EIO      0xE2
 #endif // __CIV_H
