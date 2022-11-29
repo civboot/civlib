@@ -3,6 +3,7 @@
 
 #include "./civ.h"
 
+/*extern*/ const U1* emptyNt = "";
 /*extern*/ jmp_buf* err_jmp = NULL;
 /*extern*/ U2 civErr        = 0;
 /*extern*/ Civ civ          = (Civ) {0};
@@ -45,12 +46,12 @@ void srBE(U1* p, Slot size, U4 value) { // store Big Endian
 // ##
 // # min/max
 #define MIN_DEF { if(a < b) return a; return b; }
-U4  U4_min (U4  a, U4  b) MIN_DEF
-Ref Ref_min(Ref a, Ref b) MIN_DEF
+U4   U4_min (U4  a, U4  b) MIN_DEF
+Slot Slot_min(Slot a, Slot b) MIN_DEF
 
 #define MAX_DEF { if(a < b) return a; return b; }
-U4  U4_max (U4  a, U4  b) MAX_DEF
-Ref Ref_max(Ref a, Ref b) MAX_DEF
+U4   U4_max (U4  a, U4  b) MAX_DEF
+Slot Slot_max(Slot a, Slot b) MAX_DEF
 
 // ##
 // # Slc
@@ -93,6 +94,76 @@ bool Buf_extend(Buf* b, Slc s) {
 
 bool Buf_extendNt(Buf* b, U1* s) {
   return Buf_extend(b, Slc_frNt(s));
+}
+
+void PlcBuf_shift(PlcBuf* buf) {
+  I4 len = (I4)buf->len - buf->plc;
+  ASSERT(len >= 0, "PlcBuf_shift: invalid plc");
+  memmove(buf->dat, buf->dat + buf->plc, (U4)len);
+  buf->len = (U2)len; buf->plc = 0;
+}
+
+// #################################
+// # Ring: a lock-free ring buffer.
+
+U2 Ring_len(Ring* r) {
+  if(r->tail >= r->head) return r->tail - r->head;
+  else                   return r->tail + r->cap - r->head;
+}
+
+static inline void Ring_wrapHead(Ring* r) {
+  r->head += 1;
+  if(r->head >= r->cap) r->head = 0;
+}
+
+static inline void Ring_wrapTail(Ring* r) {
+  r->tail += 1;
+  if(r->tail >= r->cap) r->tail = 0;
+}
+
+U1* Ring_next(Ring* r) {
+  if(r->head == r->tail) return NULL;
+  U1* out = r->dat + r->head;
+  Ring_wrapHead(r);
+  return out;
+}
+
+bool Ring_push(Ring* r, U1 c) {
+  if(r->head + 1 == r->tail) return true;
+  r->dat[r->tail] = c;
+  Ring_wrapTail(r);
+  return false;
+}
+
+bool Ring_extend(Ring* r, Slc s) {
+  if(r->cap - Ring_len(r) <= s.len) return true;
+  U2 first = r->cap - r->tail;
+  if(first >= s.len) {
+    // There is enough room between tail and cap.
+    memmove(r->dat + r->tail, s.dat, s.len);
+    r->tail += s.len;
+    if(r->tail >= r->cap) r->tail = 0;
+  } else {
+    // We need to do two moves: first between tail and cap, then the rest at
+    // start of dat.
+    U2 second = s.len - first;
+    memmove(r->dat + r->tail, s.dat, first);
+    memmove(r->dat, s.dat + first, second);
+    r->tail = second;
+  }
+  return false;
+}
+
+Slc Ring_first(Ring* r) {
+  if(r->tail >= r->head) {
+    return (Slc) { .dat = r->dat + r->head, .len = r->tail - r->head };
+  }
+  return (Slc) { .dat = r->dat + r->head, .len = r->cap - r->head };
+}
+
+Slc Ring_second(Ring* r) {
+  if(r->tail >= r->head) return (Slc){0};
+  return (Slc) { .dat = r->dat, .len = r->tail };
 }
 
 // ##
@@ -292,7 +363,6 @@ void* BBA_alloc(BBA* bba, Slot sz, U2 alignment) {
   if(1 == alignment) {
     // Grow up
     Block* block = _allocBlockIfRequired(bba, sz);
-    eprintf("??? got block: %X  bot=%u top=%u\n", block, block->info.bot, block->info.top);
     if(not block) return NULL;
     U1* out = (U1*)block + block->info.bot;
     block->info.bot += sz;
@@ -308,10 +378,7 @@ void* BBA_alloc(BBA* bba, Slot sz, U2 alignment) {
 }
 
 void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
-  eprintf("??? what?\n");
   ASSERT(bba->dat, "Free empty BBA");
-  eprintf("bba=%X, data=%X, sz=%u, align=%u\n", bba, data, sz, alignment);
-
   Block* block = BBA_block(bba);
   BlockInfo* info = &block->info;
   ASSERT(( (U1*)block <= (U1*)data )
@@ -319,14 +386,11 @@ void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
          ( (U1*)data + sz <= (U1*)block + BLOCK_AVAIL ),
          "unordered free: block bounds");
   U2 plc = (U2)((U1*)data - (U1*)block);
-  eprintf("??? plc=%X\n", plc);
 
   if(1 == alignment) {
-    eprintf("??? here\n");
     ASSERT(plc == info->bot - sz, "unordered free: sz");
     info->bot = plc;
   } else {
-    eprintf("freeing it bro\n");
     sz = align(sz, FIX_ALIGN(alignment));
     ASSERT(plc <= info->top, "unordered free: sz");
     info->top = plc + sz;

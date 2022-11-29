@@ -47,6 +47,63 @@ TEST(slc)
   TASSERT_EQ(0, Slc_cmp(c, c0));
 END_TEST
 
+TEST(plcBuf)
+  char dat[] = "foo bar baz";
+  PlcBuf pb = (PlcBuf){.dat = dat, .len = 11, .cap = 11};
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("foo bar baz"), *PlcBuf_asSlc(&pb)));
+  TASSERT_EQ(0, pb.plc); TASSERT_EQ(11, pb.cap);
+  pb.plc = 4; PlcBuf_shift(&pb);
+  TASSERT_EQ(0, Slc_cmp(*PlcBuf_asSlc(&pb), Slc_ntLit("bar baz")));
+END_TEST
+
+TEST(ring)
+  U1 dat[10];
+  Ring r = (Ring) { .dat = dat, .cap = 10 };
+  TASSERT_EQ(0, Ring_len(&r));
+
+  Ring_push(&r, 'a');
+  TASSERT_EQ(1, Ring_len(&r));
+  TASSERT_EQ(0, r.head); TASSERT_EQ(1, r.tail);
+  TASSERT_EQ('a', dat[0]);
+  Ring_extend(&r, Slc_ntLit("bcde"));
+  TASSERT_EQ(0, r.head); TASSERT_EQ(5, r.tail);
+  TASSERT_EQ(0, memcmp(dat, "abcde", 5));
+
+  assert(dat == Ring_next(&r));
+  TASSERT_EQ(1, r.head); TASSERT_EQ(5, r.tail);
+  TASSERT_EQ(4, Ring_len(&r));
+  TASSERT_EQ(false, Ring_extend(&r, Slc_ntLit("ABCD")));
+  TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
+  TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_first(&r)));
+  TASSERT_EQ(0, Ring_second(&r).len);
+
+  // Cannot add len 3
+  TASSERT_EQ(true, Ring_extend(&r, Slc_ntLit("WXY")));
+  TASSERT_EQ(8, Ring_len(&r));
+
+  // Wrap around write
+  assert(dat + 1 == Ring_next(&r));
+  TASSERT_EQ(2, r.head);
+  r.head = 4;
+  TASSERT_EQ(5, Ring_len(&r));
+  TASSERT_EQ(false, Ring_extend(&r, Slc_ntLit("efgh")))
+  TASSERT_EQ(9, Ring_len(&r));
+  TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
+  TASSERT_EQ(0, memcmp(dat, "fgh", 3));
+
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("eABCDe"), Ring_first(&r)));
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("fgh"), Ring_second(&r)));
+
+  // Wrap around read
+  r.head = 8;
+  TASSERT_EQ(5, Ring_len(&r));
+  assert(dat + 8 == Ring_next(&r));
+  assert(dat + 9 == Ring_next(&r));
+  assert(dat     == Ring_next(&r));
+  TASSERT_EQ(2, Ring_len(&r));
+END_TEST
+
 TEST(sll)
   // create b -> a and then assert.
   Sll* root = NULL;
@@ -160,7 +217,6 @@ TEST_UNIX(bba, 5)
 
   TASSERT_EQ(BLOCK_AVAIL - 4, BBA_info(&bba).top);
   Arena a = BBA_asArena(&bba); // testing out arenas
-  eprintf("??? Align slot=%u  uintMax=%X\n", ALIGN_SLOT, UINTPTR_MAX);
   Xr(a,free, v1, 4, ALIGN_SLOT);
   TASSERT_EQ(BLOCK_AVAIL, BBA_info(&bba).top);
 
@@ -197,6 +253,8 @@ int main() {
   eprintf("# Starting Tests\n");
   test_basic();
   test_slc();
+  test_plcBuf();
+  test_ring();
   test_sll();
   test_dll();
   test_bst();

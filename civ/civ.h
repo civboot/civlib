@@ -50,19 +50,19 @@ typedef uint8_t              U1;
 typedef uint16_t             U2;
 typedef uint32_t             U4;
 typedef uint64_t             U8;
-typedef size_t               Ref;
-typedef Ref                  Slot;
+typedef size_t               Slot;
 
 typedef int8_t               I1;
 typedef int16_t              I2;
 typedef int32_t              I4;
 typedef int64_t              I8;
 #if RSIZE == 4
-typedef I4                   IRef;
+typedef I4                   ISlot;
 #else
-typedef I8                   IRef;
+typedef I8                   ISlot;
 #endif
-typedef IRef                 ISlot;
+
+extern const U1* emptyNt; // empty null-terminated string
 
 // ####
 // # Core Structs
@@ -70,6 +70,7 @@ typedef struct { U1* dat; U2 len;                   } Slc;
 typedef struct { U1* dat; U2 len; U2 cap;           } Buf;
 typedef struct { U1* dat; U2 len; U2 cap; U2 plc;   } PlcBuf;
 typedef struct { U1 count; U1 dat[];                } CStr;
+typedef struct { U1* dat; U2 head; U2 tail; U2 cap; } Ring;
 
 typedef struct _Sll {
   struct _Sll* next;
@@ -108,10 +109,10 @@ void srBE(U1* p, Slot size, U4 value);
 
 // ##
 // # min/max
-U4  U4_min(U4 a, U4 b);
-Ref Ref_min(Ref a, Ref b);
-U4  U4_max(U4 a, U4 b);
-Ref Ref_max(Ref a, Ref b);
+U4   U4_min(U4 a, U4 b);
+Slot Slot_min(Slot a, Slot b);
+U4   U4_max(U4 a, U4 b);
+Slot Slot_max(Slot a, Slot b);
 
 // #################################
 // # Slc: data slice of up to 64KiB indexes (0x10,000)
@@ -119,11 +120,22 @@ Ref Ref_max(Ref a, Ref b);
 Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
-#define Slc_ntLit(STR)  ((Slc){.dat = STR, .len = sizeof(STR) - 1})
+
+#define _ntLit(STR)        .dat = STR, .len = sizeof(STR) - 1
+#define Slc_ntLit(STR)     ((Slc){ _ntLit(STR) })
+#define Buf_ntLit(STR)     ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
+#define PlcBuf_ntLit(STR)  ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define Slc_lit(...)  (Slc){           \
     .dat = (U1[]){__VA_ARGS__},        \
     .len = sizeof((U1[]){__VA_ARGS__}) \
   }
+
+// Use this with printf using the '%.*s' format, like so:
+//
+//   printf("Printing my slice: %.*s\n", Dat_printf(slc));
+//
+// This is safe to use with CStr, Buf and PlcBuf.
+#define Dat_printf(DAT)   (DAT).len, (DAT).dat
 
 // #################################
 // # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
@@ -132,11 +144,36 @@ I4   Slc_cmp(Slc a, Slc b);
 Slc* Buf_asSlc(Buf*);
 Slc* PlcBuf_asSlc(PlcBuf*);
 Buf* PlcBuf_asBuf(PlcBuf*);
-void Buf_ntCopy(Buf* b, U1* s);
 
 // Attempt to extend Buf. Return true if there is not enough space.
 bool Buf_extend(Buf* b, Slc s);
 bool Buf_extendNt(Buf* b, U1* s);
+
+// #################################
+// # Ring: a lock-free ring buffer.
+// Data is written to the tail and read from the head.
+
+// The ring buffer is empty when head == tail and full when head + 1 == tail.
+U2   Ring_len(Ring* r);
+
+// Get the current character and advance the head.
+// Returns NULL if empty.
+// Typically this is used like:  while(( c = Ring_next(r) )) { ... }
+U1*  Ring_next(Ring* r);
+
+// These return true if the buffer is not large enough.
+bool   Ring_push(Ring* r, U1 c);
+bool   Ring_extend(Ring* r, Slc s);
+
+// These are used for Ring_printf
+Slc Ring_first(Ring* r);
+Slc Ring_second(Ring* r);
+
+// Remove dat[:plc], shifting data[plc:len] to the left.
+//
+// This is extremely useful when reading files: a few bytes (i.e. a word, a
+// line) can be processed at a time, then File_read called again.
+void PlcBuf_shift(PlcBuf*);
 
 // CStr
 bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
@@ -203,7 +240,6 @@ Bst* Bst_add(Bst** root, Bst* add);
     Civ_init();                        \
     civ.fb->errJmp = &localErrJmp;     \
     eprintf("## Testing " #NAME "...\n"); \
-    eprintf("??? localErrJmp: %X\n", &localErrJmp); \
     if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
 #define END_TEST  }
 
@@ -348,14 +384,18 @@ void Civ_init();
 //
 // System-specific data can expand on this, such as storing the file name/etc
 // as a child-class of File.
+//
+// The file uses a PlcBuf. Typically the user will ingest some number of bytes,
+// moving buf.plc and then calling PlcBuf_shift to clear data and read more
+// bytes from the file.
 
 #define File_seek_SET  1 // seek from beginning
 #define File_seek_CUR  2 // seek from current position
 #define File_seek_END  3 // seek from end
 
 typedef struct {
-  Ref      pos;   // current position in file. If seek: desired position.
-  Ref      fid;   // file id or reference
+  Slot      pos;   // current position in file. If seek: desired position.
+  Slot      fid;   // file id or reference
   PlcBuf   buf;   // buffer for reading or writing data
   U2       code;  // status or error (File_*)
 } File;
@@ -387,7 +427,7 @@ typedef struct { const MFile* m; File* d; } RFile;  // Role
 Resource* RFile_asResource(RFile*);
 
 // If set it is a real "file index/id"
-#define File_INDEX      ((Ref)1 << ((sizeof(Ref) * 8) - 1))
+#define File_INDEX      ((Slot)1 << ((sizeof(Slot) * 8) - 1))
 
 #define File_CLOSED   0x00
 
