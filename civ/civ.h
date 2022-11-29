@@ -329,11 +329,16 @@ Resource* Arena_asResource(Arena*);
 // #################################
 // # BBA: Block Bump Arena
 // This is a bump arena. Allocations "bump" the len (unaligned) or cap (aligned)
-// indexes, while frees are ignored.
+// indexes. Frees reverse the bump and MUST be done in reverse order (or skipped
+// if you drop the whole arena). Free must use the exact same arguments as
+// alloc.
 //
-// This is great for data that just grows and is rarely (or never) freed. It
-// will cause OOM for other workloads unless they are small and the Arena is
-// quickly dropped.
+// This allocator is great for data that just grows and is rarely freed or the
+// free-order is very controlled. This is probably the fastest possible
+// arbitrary-sized allocator.
+//
+// Fngi uses this allocator for "growing" the code heap. Therefore,
+// unaligned allocations always grow from top to bottom.
 
 typedef struct { BA* ba; BANode* dat; } BBA;
 
