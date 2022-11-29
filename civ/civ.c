@@ -59,12 +59,12 @@ Slc Slc_frNt(U1* s)     { return (Slc) { .dat = s,      .len = strlen(s) }; }
 Slc Slc_frCStr(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
 
 I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
-  U2 len; if(l.len < r.len) len = l.len;  else len = r.len;
+  U2 len = U4_min(l.len, r.len);
   U1 *lp = l.dat; U1 *rp = r.dat;
   for(U2 i = 0; i < len; i += 1) {
     if(*lp < *rp) return -1;
     if(*lp > *rp) return 1;
-    lp += 1, rp += 1;
+    lp += 1; rp += 1;
   }
   if(l.len < r.len) return -1;
   if(l.len > r.len) return 1;
@@ -108,17 +108,17 @@ void PlcBuf_shift(PlcBuf* buf) {
 
 U2 Ring_len(Ring* r) {
   if(r->tail >= r->head) return r->tail - r->head;
-  else                   return r->tail + r->cap - r->head;
+  else                   return r->tail + r->_cap - r->head;
 }
 
 static inline void Ring_wrapHead(Ring* r) {
   r->head += 1;
-  if(r->head >= r->cap) r->head = 0;
+  if(r->head >= r->_cap) r->head = 0;
 }
 
 static inline void Ring_wrapTail(Ring* r) {
   r->tail += 1;
-  if(r->tail >= r->cap) r->tail = 0;
+  if(r->tail >= r->_cap) r->tail = 0;
 }
 
 U1* Ring_next(Ring* r) {
@@ -136,13 +136,13 @@ bool Ring_push(Ring* r, U1 c) {
 }
 
 bool Ring_extend(Ring* r, Slc s) {
-  if(r->cap - Ring_len(r) <= s.len) return true;
-  U2 first = r->cap - r->tail;
+  if(r->_cap - Ring_len(r) <= s.len) return true;
+  U2 first = r->_cap - r->tail;
   if(first >= s.len) {
     // There is enough room between tail and cap.
     memmove(r->dat + r->tail, s.dat, s.len);
     r->tail += s.len;
-    if(r->tail >= r->cap) r->tail = 0;
+    if(r->tail >= r->_cap) r->tail = 0;
   } else {
     // We need to do two moves: first between tail and cap, then the rest at
     // start of dat.
@@ -154,16 +154,38 @@ bool Ring_extend(Ring* r, Slc s) {
   return false;
 }
 
+Slc Ring_avail(Ring* r) {
+  if(r->tail >= r->head) {
+    // There is data from tail to cap. Subtract 1 if head==0
+    return (Slc){r->dat + r->tail, r->_cap - r->tail - (not r->head)};
+  }
+  return (Slc){r->dat + r->tail, r->head - r->tail - 1};
+}
+
+void Ring_incTail(Ring* r, U2 inc) {
+  r->tail += inc;
+  if(r->tail >= r->_cap) {
+    r->tail = r->_cap - r->tail;
+  }
+}
+
 Slc Ring_first(Ring* r) {
   if(r->tail >= r->head) {
     return (Slc) { .dat = r->dat + r->head, .len = r->tail - r->head };
   }
-  return (Slc) { .dat = r->dat + r->head, .len = r->cap - r->head };
+  return (Slc) { .dat = r->dat + r->head, .len = r->_cap - r->head };
 }
 
 Slc Ring_second(Ring* r) {
   if(r->tail >= r->head) return (Slc){0};
   return (Slc) { .dat = r->dat, .len = r->tail };
+}
+
+I4 Ring_cmpSlc(Ring* r, Slc s) {
+  Slc first = Ring_first(r);
+  I4 cmp = Slc_cmp(first, (Slc){s.dat, first.len});
+  if(cmp) return cmp;
+  return Slc_cmp(Ring_second(r), (Slc){s.dat + first.len, s.len - first.len});
 }
 
 // ##

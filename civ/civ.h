@@ -1,6 +1,7 @@
 // civc header file.
 //
-// version: 0.0.1
+// version: 0.0.2
+
 #ifndef __CIV_H
 #define __CIV_H
 
@@ -66,11 +67,11 @@ extern const U1* emptyNt; // empty null-terminated string
 
 // ####
 // # Core Structs
-typedef struct { U1* dat; U2 len;                   } Slc;
-typedef struct { U1* dat; U2 len; U2 cap;           } Buf;
-typedef struct { U1* dat; U2 len; U2 cap; U2 plc;   } PlcBuf;
-typedef struct { U1 count; U1 dat[];                } CStr;
-typedef struct { U1* dat; U2 head; U2 tail; U2 cap; } Ring;
+typedef struct { U1* dat; U2 len;                    } Slc;
+typedef struct { U1* dat; U2 len; U2 cap;            } Buf;
+typedef struct { U1* dat; U2 len; U2 cap; U2 plc;    } PlcBuf;
+typedef struct { U1 count; U1 dat[];                 } CStr;
+typedef struct { U1* dat; U2 head; U2 tail; U2 _cap; } Ring;
 
 typedef struct _Sll {
   struct _Sll* next;
@@ -156,6 +157,11 @@ bool Buf_extendNt(Buf* b, U1* s);
 // The ring buffer is empty when head == tail and full when head + 1 == tail.
 U2   Ring_len(Ring* r);
 
+// The capacity of the Ring is one less than the buffer capacity.
+#define Ring_cap(RING)   ((RING)._cap - 1)
+
+static inline void Ring_clear(Ring* r) { r->head = 0; r->tail = 0; }
+
 // Get the current character and advance the head.
 // Returns NULL if empty.
 // Typically this is used like:  while(( c = Ring_next(r) )) { ... }
@@ -165,9 +171,22 @@ U1*  Ring_next(Ring* r);
 bool   Ring_push(Ring* r, U1 c);
 bool   Ring_extend(Ring* r, Slc s);
 
+// This API is for:
+// 1. Get an available contiguous slice of memory and store some data in it.
+//    Note: Ring_avail MAY NOT be the entire amount of available memory. It is
+//    only the contiguous memory. To fill the Ring you may need to call this
+//    twice.
+// 2. Record how much was used with incTail.
+Slc  Ring_avail(Ring* r);
+void Ring_incTail(Ring* r, U2 inc);
+
 // These are used for Ring_printf
 Slc Ring_first(Ring* r);
 Slc Ring_second(Ring* r);
+
+I4  Ring_cmpSlc(Ring* r, Slc s);
+
+
 
 // Remove dat[:plc], shifting data[plc:len] to the left.
 //
@@ -401,8 +420,8 @@ void Civ_init();
 typedef struct {
   Slot      pos;   // current position in file. If seek: desired position.
   Slot      fid;   // file id or reference
-  PlcBuf   buf;   // buffer for reading or writing data
-  U2       code;  // status or error (File_*)
+  Ring      ring;   // buffer for reading or writing data
+  U2        code;  // status or error (File_*)
 } File;
 
 typedef struct {

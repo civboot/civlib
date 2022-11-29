@@ -7,18 +7,19 @@ by simply copying the `civ` directory and including the relevant files for your
 program.
 
 The fngi runtime depends on the following, which are provided by civc: [+]
+* Core data types including Slc, Buf, CStr (byte counted string), Ring buffer,
+  SLL and DLL (single/double linked lists), and BST (binary search tree) -- as
+  well as common methods and safe type conversion functions.
 * A 0x1000 byte (4KiB)  block allocator, permitting allocating and freeing
   single blocks without memory fragmentation.
 * A basic arena allocator allowing allocation and freeing of both aligned and
   non-aligned memory.
 * A File Role type, permitting reading and writing to byte stream resources
   through standardized method pointer offsets (see Role section).
-* Core data types including Slc, Buf, CStr (byte counted string), Ring buffer,
-  SLL and DLL (single/double linked lists), and BST (binary search tree) -- as
-  well as common methods and safe type conversion functions.
 * A basic concept of Fibers, allowing for implementing a cooperatively
   scheduled system on top.
-* A global environment for the allocated values.
+* A global environment for the allocated values, giving implementors a
+  standard base to interact with their environment.
 [/]
 
 [h2]Data Inheritance[/]

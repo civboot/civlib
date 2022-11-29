@@ -53,14 +53,14 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN) {
 // Should only be used in tests
 File File_malloc(U4 bufCap) {
   return (File) {
-    .buf = (PlcBuf) { .dat = malloc(bufCap), .cap = bufCap },
+    .ring = (Ring) { .dat = malloc(bufCap), ._cap = bufCap },
     .code = File_CLOSED,
   };
 }
 
-File File_new(PlcBuf buf) {
+File File_new(Ring ring) {
   return (File) {
-    .buf = buf,
+    .ring = ring,
     .code = File_CLOSED,
   };
 }
@@ -80,7 +80,7 @@ void File_open(File* f, Slc path, Slot options) {
   int fd = File_handleErr(f, open(pathname, O_NONBLOCK, O_RDWR));
   if(fd < 0) return;
   f->pos = 0; f->fid = File_INDEX | fd;
-  f->buf.len = 0; f->buf.plc = 0; f->code = File_DONE;
+  f->ring.head = 0; f->ring.tail = 0; f->code = File_DONE;
 }
 
 void File_close(File* f) {
@@ -92,7 +92,7 @@ void File_close(File* f) {
 bool File_drop(File* f) {
   if(f->code != File_CLOSED) File_close(f);
   if(f->code != File_CLOSED) return false;
-  Xr(*civ.fb->arena, free, f->buf.dat, f->buf.cap, 1);
+  Xr(*civ.fb->arena, free, f->ring.dat, f->ring._cap, 1);
   return true;
 }
 
@@ -105,18 +105,22 @@ void File_seek(File* f, ISlot offset, U1 whence) {
 void File_read(File* f) {
   assert(f->code == File_READING || f->code >= File_DONE);
   int len;
+  Ring* r = &f->ring;
   if(!(File_INDEX & f->fid)) { // mocked file.
     PlcBuf* p = (PlcBuf*) f->fid;
-    len = U4_min(p->len - p->plc, f->buf.cap - f->buf.len);
-    memmove(f->buf.dat, p->dat + p->plc, len); p->plc += len;
+    len = U4_min(p->len - p->plc, Ring_cap(*r) - Ring_len(r));
+    Ring_extend(r, (Slc){p->dat, len});
+    p->plc += len;
   } else {
     f->code = File_READING;
-    len = read(File_FD(*f), f->buf.dat + f->buf.len, f->buf.cap - f->buf.len);
+    Slc avail = Ring_avail(r);
+    len = read(File_FD(*f), avail.dat, avail.len);
     len = File_handleErr(f, len);  assert(len >= 0);
+    Ring_incTail(r, len);
   }
-  f->buf.len += len; f->pos += len;
-  if(f->buf.len == f->buf.cap) f->code = File_DONE;
-  else if (0 == len)           f->code = File_EOF;
+  f->pos += len;
+  if(Ring_len(r) == Ring_cap(*r)) f->code = File_DONE;
+  else if (0 == len)              f->code = File_EOF;
 }
 
 void File_write(File* f) {
@@ -124,9 +128,9 @@ void File_write(File* f) {
 }
 
 // Read until the buffer is full or EOF.
-// If the file-code is a DONE code then also clear the buf.len
+// If the file-code is a DONE code then also clear the ring.
 void File_readAll(File* f) {
-  if(f->code >= File_DONE) f->buf.len = 0;
+  if(f->code >= File_DONE) Ring_clear(&f->ring);
   do { File_read(f); } while (f->code < File_DONE);
 }
 

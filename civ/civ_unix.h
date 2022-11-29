@@ -34,7 +34,7 @@ extern const MFile mFile;
 #define File_TRUNC     O_TRUNC
 
 File File_malloc(U4 bufCap); // only use in tests
-File File_new(PlcBuf buf);
+File File_new(Ring ring);
 void File_readAll(File* f);
 
 int File_handleErr(File* f, int res);

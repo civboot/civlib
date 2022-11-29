@@ -58,13 +58,19 @@ END_TEST
 
 TEST(ring)
   U1 dat[10];
-  Ring r = (Ring) { .dat = dat, .cap = 10 };
+  Ring r = (Ring) { .dat = dat, ._cap = 10 };
   TASSERT_EQ(0, Ring_len(&r));
+  Slc avail = Ring_avail(&r);
+  TASSERT_EQ(9, avail.len);
+  assert(dat == avail.dat);
 
   Ring_push(&r, 'a');
   TASSERT_EQ(1, Ring_len(&r));
   TASSERT_EQ(0, r.head); TASSERT_EQ(1, r.tail);
   TASSERT_EQ('a', dat[0]);
+  avail = Ring_avail(&r);
+  TASSERT_EQ(8, avail.len); assert(dat + 1 == avail.dat);
+
   Ring_extend(&r, Slc_ntLit("bcde"));
   TASSERT_EQ(0, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(0, memcmp(dat, "abcde", 5));
@@ -72,11 +78,15 @@ TEST(ring)
   assert(dat == Ring_next(&r));
   TASSERT_EQ(1, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(4, Ring_len(&r));
+
   TASSERT_EQ(false, Ring_extend(&r, Slc_ntLit("ABCD")));
   TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
   TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_first(&r)));
   TASSERT_EQ(0, Ring_second(&r).len);
+  TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("bcdeABCD")));
+  avail = Ring_avail(&r);
+  TASSERT_EQ(1, avail.len); assert(dat + 9 == avail.dat);
 
   // Cannot add len 3
   TASSERT_EQ(true, Ring_extend(&r, Slc_ntLit("WXY")));
@@ -91,9 +101,13 @@ TEST(ring)
   TASSERT_EQ(9, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
   TASSERT_EQ(0, memcmp(dat, "fgh", 3));
+  avail = Ring_avail(&r);
+  TASSERT_EQ(0, avail.len); assert(dat + 3 == avail.dat);
 
   TASSERT_EQ(0, Slc_cmp(Slc_ntLit("eABCDe"), Ring_first(&r)));
   TASSERT_EQ(0, Slc_cmp(Slc_ntLit("fgh"), Ring_second(&r)));
+  TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("eABCDefgh")));
+  TASSERT_EQ(1, Ring_cmpSlc(&r, Slc_ntLit("aABCDefgh")));
 
   // Wrap around read
   r.head = 8;
@@ -229,23 +243,27 @@ TEST(file)
   File f = File_malloc(20);
   File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
   assert(f.code == File_DONE);
-  File_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
+  TASSERT_EQ(0, Ring_len(&f.ring));
+  TASSERT_EQ(0, f.ring.head);
 
   File_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
+  TASSERT_EQ(19, Ring_len(&f.ring));
+  assert(f.code == File_DONE);
+  // assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
 
-  File_readAll(&f);
-  assert(f.buf.len == 20); assert(f.code == File_DONE);
-  assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
+  // File_readAll(&f);
+  // assert(f.buf.len == 20); assert(f.code == File_DONE);
+  // assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
 
-  File_readAll(&f);
-  assert(f.buf.len == 2); assert(f.code == File_EOF);
-  assert(0 == memcmp(f.buf.dat, "\n\n", 2));
-  File_close(&f);
-  free(f.buf.dat);
+  // File_readAll(&f);
+  // assert(f.buf.len == 20); assert(f.code == File_DONE);
+  // assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
+
+  // File_readAll(&f);
+  // assert(f.buf.len == 2); assert(f.code == File_EOF);
+  // assert(0 == memcmp(f.buf.dat, "\n\n", 2));
+  // File_close(&f);
+  free(f.ring.dat);
 END_TEST
 
 
