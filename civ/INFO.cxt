@@ -66,31 +66,33 @@ An instance of a Role is composed of two things: [+]
 
 In code this simply looks like:
 [#]
-// methods
+
+// A Role is just a collection of methods and some data.
 typedef struct {
-  void (*add)(void* self, int a); // add method pointer
+  void (*add)(void* this, int a); // pointer to add method
   ... other methods
 } MExampleRole;
+
+typedef struct {
+  MExampleRole* m, // a pointer to methods
+  void* d;         // a pointer to data of an unknown type
+} ExampleRole;
+
+// Creating something that implements the role:
 
 typedef struct {int a;} ExampleInstance;
 
 // Example method implementation
-void ExampleInstance_add(ExampleInstance* self, int a) {
-  self->a += a;
+METHOD_DEFINE(/*return*/void, ExampleInstance,add, int a) {
+  this->a += a;
 }
 
-typedef struct {
-  MyMethods* m,
-  void* d;
-} ExampleRole;
-
-const MExampleRole mExampleInstance =
-(MExampleRole) {
+METHODS_DEFINE(ExampleRole, ExampleInstance_mExampleRole,
   .add  = Role_METHOD(ExampleInstance_add, int a),
-};
+)
 
 ExampleRole ExampleInstance_asExampleRole(ExampleInstance* d) {
-  return (ExampleRole) { .m = &mExampleInstance, .d = d };
+  return (ExampleRole) { .m = ExampleInstance_mExampleRole, .d = d };
 }
 [#]
 
@@ -105,10 +107,10 @@ assert(d.a == 8);
 
 It's a fair amount of boilerplate in C, but it is EXTREMELY simple and
 performant. Also, using a role is much easier than defining one, which is good
-since they are used extensively.
+since they are used extensively. See civ/civ.h for more documentation.
 
 ["] Since a role is only two pointers, best practice is to take them by value
-    (not by pointer).
+    (not by pointer). I.e. "myFunction(MyRole role, int arg)"
 [/]
 
 [h2]Differences with "normal" C[/]
