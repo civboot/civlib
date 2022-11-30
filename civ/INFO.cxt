@@ -82,13 +82,15 @@ typedef struct {
 
 typedef struct {int a;} ExampleInstance;
 
-// Example method implementation
+// defines:
+// - ExampleInstance_add function.
+// - M_ExampleInstance_add method pointer.
 METHOD_DEFINE(/*return*/void, ExampleInstance,add, int a) {
   this->a += a;
 }
 
-METHODS_DEFINE(ExampleRole, ExampleInstance_mExampleRole,
-  .add  = Role_METHOD(ExampleInstance_add, int a),
+METHODS_DEFINE(MExampleRole, ExampleInstance_mExampleRole,
+  .add  = M_ExampleInstance_add,
 )
 
 ExampleRole ExampleInstance_asExampleRole(ExampleInstance* d) {
