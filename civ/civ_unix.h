@@ -32,6 +32,7 @@ extern const MFile mFile;
 #define File_RDONLY    O_RDONLY
 #define File_WRONLY    O_WRONLY
 #define File_TRUNC     O_TRUNC
+#define File_CREATE    O_CREAT
 
 File File_malloc(U4 bufCap); // only use in tests
 File File_new(Ring ring);
@@ -41,7 +42,10 @@ int File_handleErr(File* f, int res);
 bool File_drop(File* f);
 void File_open(File* f, Slc s, Slot options);
 void File_close(File* f);
+void File_stop(File* f);
+void File_seek(File* f, ISlot offset, U1 whence);
 void File_read(File* f);
+void File_write(File* f);
 RFile File_asRFile(File* d);
 
 #endif // __CIV_UNIX_H

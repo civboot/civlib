@@ -29,6 +29,12 @@ TEST(basic)
   TASSERT_EQ(4, align(1, 4));
   TASSERT_EQ(4, align(2, 4));
   TASSERT_EQ(4, align(4, 4));
+
+  TASSERT_EQ(0x7,  bitClr(0x1F, 0x18));
+  TASSERT_EQ(0x19, bitSet(0x1F, 1, 7));
+
+  EXPECT_ERR(SET_ERR(Slc_ntLit("expected 1")));
+  EXPECT_ERR(SET_ERR(Slc_ntLit("expected 2")));
 END_TEST
 
 TEST(slc)
@@ -79,7 +85,7 @@ TEST(ring)
   TASSERT_EQ(1, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(4, Ring_len(&r));
 
-  TASSERT_EQ(false, Ring_extend(&r, Slc_ntLit("ABCD")));
+  Ring_extend(&r, Slc_ntLit("ABCD"));
   TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
   TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_first(&r)));
@@ -89,7 +95,7 @@ TEST(ring)
   TASSERT_EQ(1, avail.len); assert(dat + 9 == avail.dat);
 
   // Cannot add len 3
-  TASSERT_EQ(true, Ring_extend(&r, Slc_ntLit("WXY")));
+  EXPECT_ERR( Ring_extend(&r, Slc_ntLit("WXY")) );
   TASSERT_EQ(8, Ring_len(&r));
 
   // Wrap around write
@@ -97,7 +103,7 @@ TEST(ring)
   TASSERT_EQ(2, r.head);
   r.head = 4;
   TASSERT_EQ(5, Ring_len(&r));
-  TASSERT_EQ(false, Ring_extend(&r, Slc_ntLit("efgh")))
+  Ring_extend(&r, Slc_ntLit("efgh"));
   TASSERT_EQ(9, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
   TASSERT_EQ(0, memcmp(dat, "fgh", 3));
@@ -239,33 +245,62 @@ TEST_UNIX(bba, 5)
   TASSERT_EQ(5, civ.ba.len);
 END_TEST_UNIX
 
-TEST(file)
+TEST(fileRead)
   File f = File_malloc(20);
+  Ring* r = &f.ring;
   File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
-  assert(f.code == File_DONE);
+  TASSERT_EQ(File_DONE, f.code);
   TASSERT_EQ(0, Ring_len(&f.ring));
   TASSERT_EQ(0, f.ring.head);
 
   File_readAll(&f);
-  TASSERT_EQ(19, Ring_len(&f.ring));
+  TASSERT_EQ(19, Ring_len(r));
   assert(f.code == File_DONE);
-  // assert(0 == memcmp(f.buf.dat, "easy to test text\nwr", 20));
+  assert(0 == memcmp(r->dat, "easy to test text\nw", 19));
 
-  // File_readAll(&f);
-  // assert(f.buf.len == 20); assert(f.code == File_DONE);
-  // assert(0 == memcmp(f.buf.dat, "iting a simple haiku", 20));
+  Ring_clear(r); File_readAll(&f);
+  assert(Ring_len(r) == 19); assert(f.code == File_DONE);
+  assert(0 == memcmp(r->dat, "riting a simple hai", 19));
 
-  // File_readAll(&f);
-  // assert(f.buf.len == 20); assert(f.code == File_DONE);
-  // assert(0 == memcmp(f.buf.dat, "\nand the job is done", 20));
+  // Now use it like a parser. Inc part of the ring.
+  Ring_incHead(r, 16); File_readAll(&f);
+  assert(Ring_len(r) == 19); assert(f.code == File_DONE);
+  assert(0 == Ring_cmpSlc(r, Slc_ntLit("haiku\nand the job i")));
 
-  // File_readAll(&f);
-  // assert(f.buf.len == 2); assert(f.code == File_EOF);
-  // assert(0 == memcmp(f.buf.dat, "\n\n", 2));
-  // File_close(&f);
-  free(f.ring.dat);
+  // Again, inc part of the ring.
+  Ring_incHead(r, 18); File_readAll(&f);
+  TASSERT_EQ(9, Ring_len(r));
+  TASSERT_EQ(f.code, File_EOF);
+  assert(0 == Ring_cmpSlc(r, Slc_ntLit("is done\n\n")));
+  File_close(&f);
+  free(r->dat);
 END_TEST
 
+TEST(fileWrite)
+  File f = File_malloc(20);
+  Ring* r = &f.ring;
+  Slc path = Slc_ntLit("bin/UFile_test.txt");
+  File_open(&f, path, File_WRONLY | File_CREATE | File_TRUNC);
+  TASSERT_EQ(File_DONE, f.code);
+  Ring_extend(r, Slc_ntLit("hello there! My "));
+  File_write(&f);
+  TASSERT_EQ(true, Ring_isEmpty(r)); TASSERT_EQ(File_DONE, f.code);
+  File_stop(&f);
+
+  Ring_clear(r);
+  Ring_extend(r, Slc_ntLit("name is Joe!"));
+  File_write(&f);
+  TASSERT_EQ(File_DONE, f.code);
+  TASSERT_EQ(true, Ring_isEmpty(r));
+
+  File_close(&f); Ring_clear(r);
+  File_open(&f, path, File_RDONLY); TASSERT_EQ(f.code, File_DONE);
+  File_read(&f); TASSERT_EQ(f.code, File_DONE);
+  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("hello there! My nam")));
+
+  File_close(&f);
+  free(r->dat);
+END_TEST
 
 int main() {
   eprintf("# Starting Tests\n");
@@ -278,7 +313,8 @@ int main() {
   test_bst();
   test_ba();
   test_bba();
-  test_file();
+  test_fileRead();
+  test_fileWrite();
   eprintf("# Tests All Pass\n");
   return 0;
 }

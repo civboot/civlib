@@ -18,10 +18,15 @@ void Civ_init() {
 
 #define FIX_ALIGN(A) ((A == 1) ? 1 : 4)
 
+void defaultErrPrinter() {
+  eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat);
+}
+
 Slot align(Slot ptr, U2 alignment) {
   U2 need = alignment - (ptr % alignment);
   return (need == alignment) ? ptr : (ptr + need);
 }
+
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
@@ -128,15 +133,14 @@ U1* Ring_next(Ring* r) {
   return out;
 }
 
-bool Ring_push(Ring* r, U1 c) {
-  if(r->head + 1 == r->tail) return true;
+void Ring_push(Ring* r, U1 c) {
+  ASSERT(r->head + 1 != r->tail, "Ring push: already full");
   r->dat[r->tail] = c;
   Ring_wrapTail(r);
-  return false;
 }
 
-bool Ring_extend(Ring* r, Slc s) {
-  if(r->_cap - Ring_len(r) <= s.len) return true;
+void Ring_extend(Ring* r, Slc s) {
+  ASSERT(r->_cap - Ring_len(r) > s.len, "Ring extend: too full");
   U2 first = r->_cap - r->tail;
   if(first >= s.len) {
     // There is enough room between tail and cap.
@@ -151,7 +155,6 @@ bool Ring_extend(Ring* r, Slc s) {
     memmove(r->dat, s.dat + first, second);
     r->tail = second;
   }
-  return false;
 }
 
 Slc Ring_avail(Ring* r) {
@@ -165,7 +168,14 @@ Slc Ring_avail(Ring* r) {
 void Ring_incTail(Ring* r, U2 inc) {
   r->tail += inc;
   if(r->tail >= r->_cap) {
-    r->tail = r->_cap - r->tail;
+    r->tail -= r->_cap;
+  }
+}
+
+void Ring_incHead(Ring* r, U2 inc) {
+  r->head += inc;
+  if(r->head >= r->_cap) {
+    r->head -= r->_cap;
   }
 }
 

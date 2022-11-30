@@ -17,8 +17,6 @@
 #include <stdio.h>   // printf
 #include <errno.h>   // errno global
 
-#include "constants.h"
-
 
 #if UINTPTR_MAX == 0xFFFFFFFF
 #define RSIZE   4
@@ -31,11 +29,9 @@
 
 #define not  !
 #define and  &&
-#define msk  &
 #define or   ||
+#define msk  &
 #define jn   |
-#define R0   return 0;
-#define RV   return;
 
 #define eprintf(F, ...)   fprintf(stderr, F __VA_OPT__(,) __VA_ARGS__)
 
@@ -89,8 +85,14 @@ typedef struct { Dll* start; } DllRoot;
 // ####
 // # Core methods
 
+void defaultErrPrinter();
+
 // Get the required addition/subtraction to ptr to achieve alignment
 Slot align(Slot ptr, U2 alignment);
+
+// Clear bits in a mask.
+#define bitClr(V, MASK)      ((V) & (~(MASK)))
+#define bitSet(V, SET, MASK) (bitClr(V, MASK) | (SET))
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
@@ -154,7 +156,9 @@ bool Buf_extendNt(Buf* b, U1* s);
 // # Ring: a lock-free ring buffer.
 // Data is written to the tail and read from the head.
 
-// The ring buffer is empty when head == tail and full when head + 1 == tail.
+static inline bool Ring_isEmpty(Ring* r) { return r->head     == r->tail; }
+static inline bool Ring_isFull(Ring* r)  { return r->head + 1 == r->tail; }
+
 U2   Ring_len(Ring* r);
 
 // The capacity of the Ring is one less than the buffer capacity.
@@ -168,8 +172,8 @@ static inline void Ring_clear(Ring* r) { r->head = 0; r->tail = 0; }
 U1*  Ring_next(Ring* r);
 
 // These return true if the buffer is not large enough.
-bool   Ring_push(Ring* r, U1 c);
-bool   Ring_extend(Ring* r, Slc s);
+void   Ring_push(Ring* r, U1 c);
+void   Ring_extend(Ring* r, Slc s);
 
 // This API is for:
 // 1. Get an available contiguous slice of memory and store some data in it.
@@ -180,12 +184,15 @@ bool   Ring_extend(Ring* r, Slc s);
 Slc  Ring_avail(Ring* r);
 void Ring_incTail(Ring* r, U2 inc);
 
-// These are used for Ring_printf
+
+// This API is for:
+// 1. Get the first "chunk" of data and use some amount of it.
+// 2. incHead by the amount used.
 Slc Ring_first(Ring* r);
 Slc Ring_second(Ring* r);
+void Ring_incHead(Ring* r, U2 inc);
 
 I4  Ring_cmpSlc(Ring* r, Slc s);
-
 
 
 // Remove dat[:plc], shifting data[plc:len] to the left.
@@ -253,18 +260,22 @@ Bst* Bst_add(Bst** root, Bst* add);
 // #################################
 // # Error Handling and Testing
 
+// Compiler state to disable error logs when expecting an error.
 #define TEST(NAME) \
-  void test_ ## NAME () {              \
-    jmp_buf localErrJmp;               \
-    Civ_init();                        \
-    civ.fb->errJmp = &localErrJmp;     \
+  void test_ ## NAME () {                 \
+    jmp_buf localErrJmp;                  \
+    Civ_init();                           \
+    civ.fb->errJmp = &localErrJmp;        \
     eprintf("## Testing " #NAME "...\n"); \
-    if(setjmp(localErrJmp)) { civ.civErrPrinter(); exit(1); }
+    if(setjmp(localErrJmp)) {             \
+      if(civ.errPrinter) civ.errPrinter(); \
+      else defaultErrPrinter();            \
+      exit(1);                             \
+    }
 #define END_TEST  }
 
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
-  eprintf("Longjmping to: %X\n", civ.fb->errJmp); \
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
@@ -273,6 +284,27 @@ Bst* Bst_add(Bst** root, Bst* add);
   if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
   assert((EXPECT) == __result); }
 
+// Macro expansion shenanigans. Note that a plain foo ## __LINE__ expands to the
+// literal string "foo__LINE__", when you wanted "foo362" (when line=362)
+#define _JOIN(A, B) A ## B
+#define JOIN(A, B) _JOIN(A, B)
+#define LINED(A)    JOIN(A, __LINE__)
+
+// Execute CODE. HANDLE will be executed if an error longjmp occurs.
+#define HANDLE_ERR(CODE, HANDLE) \
+  jmp_buf* LINED(prevJmp) = civ.fb->errJmp;                \
+  jmp_buf LINED(newJmp); civ.fb->errJmp = &LINED(newJmp);  \
+  if(setjmp(LINED(newJmp))) {             \
+    civ.fb->errJmp = LINED(prevJmp);      \
+    HANDLE;                               \
+  } else { CODE; }
+
+// Execute CODE and expect an error longjmp
+#define EXPECT_ERR(CODE)                  \
+  civ.fb->state |= Fiber_EXPECT_ERR;      \
+  HANDLE_ERR(                             \
+    { CODE; ASSERT(false, "expected error never happend"); } \
+    , civ.fb->state &= ~Fiber_EXPECT_ERR)
 
 // #################################
 // # Methods and Roles
@@ -379,12 +411,16 @@ extern const MArena mBBA;
 // #################################
 // # Civ Global Environment
 
+// fiberState bitfield
+#define Fiber_EXPECT_ERR   (0x80 /*disable error logging*/)
+
 typedef struct _Fiber {
   struct _Fiber* next;
   struct _Fiber* prev;
   jmp_buf*   errJmp;
   Arena*     arena;     // Global default arena
   Slc err;
+  U2 state;
 } Fiber;
 
 typedef struct {
@@ -393,7 +429,7 @@ typedef struct {
 
   // Misc (normally not set/read)
   Fiber rootFiber;
-  void (*civErrPrinter)();
+  void (*errPrinter)();
 } Civ;
 
 extern Civ civ;
