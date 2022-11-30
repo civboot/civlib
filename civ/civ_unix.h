@@ -25,6 +25,7 @@ void CivUnix_drop();
 void CivUnix_allocBlocks(Slot numBlocks);
 
 // File
+#define UFile BaseFile
 
 extern const MFile mFile;
 
@@ -34,18 +35,20 @@ extern const MFile mFile;
 #define File_TRUNC     O_TRUNC
 #define File_CREATE    O_CREAT
 
-File File_malloc(U4 bufCap); // only use in tests
-File File_new(Ring ring);
-void File_readAll(File* f);
+UFile UFile_malloc(U4 bufCap); // only use in tests
+UFile UFile_new(Ring ring);
+void  UFile_readAll(UFile* f);
 
-int File_handleErr(File* f, int res);
-bool File_drop(File* f);
-void File_open(File* f, Slc s, Slot options);
-void File_close(File* f);
-void File_stop(File* f);
-void File_seek(File* f, ISlot offset, U1 whence);
-void File_read(File* f);
-void File_write(File* f);
-RFile File_asRFile(File* d);
+int UFile_handleErr(UFile* f, int res);
+DECLARE_METHOD(bool, UFile,drop, Arena a);
+DECLARE_METHOD(Sll*, UFile,resourceLL);
+DECLARE_METHOD(void, UFile,open, Slc path, Slot options);
+DECLARE_METHOD(void, UFile,close);
+DECLARE_METHOD(void, UFile,stop);
+DECLARE_METHOD(void, UFile,seek, ISlot offset, U1 whence);
+DECLARE_METHOD(void, UFile,read);
+DECLARE_METHOD(void, UFile,write);
+
+File UFile_asFile(UFile* d);
 
 #endif // __CIV_UNIX_H

@@ -83,7 +83,7 @@ typedef struct _Dll {
 typedef struct { Dll* start; } DllRoot;
 
 // ####
-// # Core methods
+// # Core functions
 
 void defaultErrPrinter();
 
@@ -308,6 +308,45 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 // #################################
 // # Methods and Roles
+// C is a VERY annoying language when trying to improve the ergonomics of
+// defining methods. There is no way (at compile time) to safely define a
+// function as one with a different type at compile.
+//
+// The DECLARE/DEFINE METHOD macros below create both the MyType_method
+// function and a M_MyType_method function reference which casts MyType_method
+// with a "void* this" as the first parameter, so it can be used in the Role.
+//
+// In your .h file:
+// - use DECLARE_METHOD(someReturnType, MyType,myMethod, arg1)
+//   - Note: this also declares M_MyType_myMethod for you.
+// - Define a MyType_mRole function which returns a method pointer for the
+//   relevant Role.
+// - declare a "Role MyType_asRole(MyType*)" function
+//
+// In your .c file:
+// - use DEFINE_METHOD(someReturnType, MyType,myMethod, arg1)
+//   - Note: this also defines M_MyType_myMethod for you.
+// - use DEFINE_METHODS(Role, MyType_mRole, .myMethod=M_MyType_myMethod)
+// - define the "Role MyType_asRole(MyType*)" function using the above method.
+//
+// For an example, see civ's implementation of the BBA methods.
+
+#define DECLARE_METHOD(RETURNS, TYPE, NAME, ...)                          \
+  extern RETURNS (*M_ ## TYPE ## _ ## NAME)(void* __VA_OPT__(,) __VA_ARGS__);    \
+  RETURNS TYPE ## _ ## NAME(TYPE* this __VA_OPT__(,) __VA_ARGS__)
+
+#define DEFINE_METHOD(RETURNS, TYPE, NAME, ...)                           \
+  RETURNS (*M_ ## TYPE ## _ ## NAME)(void* __VA_OPT__(,) __VA_ARGS__) =   \
+    ( RETURNS (*)(void* __VA_OPT__(,) __VA_ARGS__) ) TYPE ## _ ## NAME;   \
+  RETURNS TYPE ## _ ## NAME(TYPE* this __VA_OPT__(,) __VA_ARGS__)
+
+#define DEFINE_METHODS(RETURNS, NAME, ...) \
+  RETURNS* NAME() { \
+    static RETURNS m = {0}; \
+    static bool notInit = true; \
+    if(notInit) m = (RETURNS) { __VA_ARGS__ }; \
+    return &m; \
+  }
 
 // Role Execute: Xr(myRole, meth, a, b) -> myRole.m.meth(myRole.d, a, b)
 #define Xr(R, M, ...)    (R).m->M((R).d __VA_OPT__(,) __VA_ARGS__)
@@ -353,9 +392,12 @@ void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]);
 typedef struct {
   void  (*drop)            (void* d);
   void* (*alloc)           (void* d, Slot sz, U2 alignment);
+  // TODO: make free falible. In some cases (like dropping resource before
+  // dropping arenas) success doesn't matter!
   void  (*free)            (void* d, void* dat, Slot sz, U2 alignment);
   Slot  (*maxAlloc)        (void* d);
 } MArena;
+
 
 typedef struct { const MArena* m; void* d; } Arena;
 
@@ -370,8 +412,12 @@ typedef struct {
   // This must NOT free the `d` pointer itself.
   //
   // Return true if drop is done. Returning false means it will be called again
-  // (although other resources may be called first).
-  bool (*drop)            (void* d, Arena* a);
+  // after other resources are dropped.
+  bool (*drop)            (void* d, Arena a);
+
+  // Get the Sll view of the resource. This is used by Arenas to track resources
+  // tied to them so they can be dropped.
+  Sll* (*resourceLL)       (void* d);
 } MResource;
 
 typedef struct { const MResource* m; void* d; } Resource;
@@ -398,15 +444,14 @@ Arena    BBA_asArena(BBA* b);
 #define  BBA_block(BBA) ((BBA)->dat->block)
 #define  BBA_info(BBA)  (BBA_block(BBA)->info)
 
-void   BBA_drop(BBA* bba);  // drop whole Arena
-Slot   BBA_spare(BBA* bba); // get spare bytes
+DECLARE_METHOD(void, BBA,drop);   // BBA_drop
+DECLARE_METHOD(Slot , BBA,spare); // BBA_spare
+DECLARE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment); // BBA_alloc
+DECLARE_METHOD(void , BBA,free , void* data, Slot sz, U2 alignment); // BBA_free
+DECLARE_METHOD(Slot , BBA,maxAlloc); // BBA_maxAlloc
 
-void*  BBA_alloc(BBA* bba, Slot sz, U2 alignment);
-void   BBA_free (BBA* bba, void* data, Slot sz, U2 alignment);
+MArena* mBBAGet();
 
-Slot   BBA_maxAlloc(void* anything); // actually constant
-
-extern const MArena mBBA;
 
 // #################################
 // # Civ Global Environment
@@ -454,37 +499,39 @@ void Civ_init();
 #define File_seek_END  3 // seek from end
 
 typedef struct {
-  Slot      pos;   // current position in file. If seek: desired position.
-  Slot      fid;   // file id or reference
-  Ring      ring;   // buffer for reading or writing data
-  U2        code;  // status or error (File_*)
-} File;
+  Sll*      nextResource; // resource SLL
+  Slot      pos;      // current position in file. If seek: desired position.
+  Slot      fid;      // file id or reference
+  Ring      ring;     // buffer for reading or writing data
+  U2        code;     // status or error (File_*)
+} BaseFile;
 
 typedef struct {
   // Resource methods
-  bool (*drop) (File* d);
+  bool (*drop)            (void* d, Arena a);
+  Sll* (*resourceLL)      (void* d);
 
   // Close a file
-  void (*close) (File* d);
+  void (*close) (void* d);
 
   // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
-  void (*open)  (File* d, Slc path, Slot options);
+  void (*open)  (void* d, Slc path, Slot options);
 
   // Stop async operations (may be noop)
-  void (*stop)  (File* d);
+  void (*stop)  (void* d);
 
   // Seek in the file whence=File_seek_(SET|CUR|END)
-  void (*seek)  (File* d, ISlot offset, U1 whence);
+  void (*seek)  (void* d, ISlot offset, U1 whence);
 
   // Read from a file into d buffer.
-  void (*read)  (File* d);
+  void (*read)  (void* d);
 
   // Write to a file from d buffer.
-  void (*write)(File* d);
+  void (*write)(void* d);
 } MFile;
 
-typedef struct { const MFile* m; File* d; } RFile;  // Role
-Resource* RFile_asResource(RFile*);
+typedef struct { const MFile* m; void* d; } File;  // Role
+Resource* File_asResource(File*);
 
 // If set it is a real "file index/id"
 #define File_INDEX      ((Slot)1 << ((sizeof(Slot) * 8) - 1))

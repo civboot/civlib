@@ -16,6 +16,7 @@ void Civ_init() {
 // ####
 // # Core methods
 
+// Most APIs only align on 4 bytes (or are unaligned)
 #define FIX_ALIGN(A) ((A == 1) ? 1 : 4)
 
 void defaultErrPrinter() {
@@ -26,7 +27,6 @@ Slot align(Slot ptr, U2 alignment) {
   U2 need = alignment - (ptr % alignment);
   return (need == alignment) ? ptr : (ptr + need);
 }
-
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
@@ -358,14 +358,14 @@ DllRoot* BBA_asDllRoot(BBA* bba) { return (DllRoot*)&bba->dat; }
 
 DEFINE_AS(Arena,  /*as*/Resource);
 
-void BBA_drop(BBA* bba) {
-  BA_freeAll(bba->ba, bba->dat);
-  bba->dat = NULL;
+DEFINE_METHOD(void, BBA,drop) {
+  BA_freeAll(this->ba, this->dat);
+  this->dat = NULL;
 }
 
 // Get spare bytes
-Slot BBA_spare(BBA* bba) {
-  BlockInfo* info = &BBA_info(bba);
+DEFINE_METHOD(Slot, BBA,spare) {
+  BlockInfo* info = &BBA_info(this);
   return info->top - info->bot;
 }
 
@@ -380,7 +380,7 @@ static Block* BBA_allocBlock(BBA* bba) {
 }
 
 // Return block that can handle the growth or NULL
-Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
+static Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
   if(not bba->dat)
     return BBA_allocBlock(bba);
   Block* block = BBA_block(bba);
@@ -390,11 +390,11 @@ Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
 }
 
 
-void* BBA_alloc(BBA* bba, Slot sz, U2 alignment) {
+DEFINE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment) {
   ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
   if(1 == alignment) {
     // Grow up
-    Block* block = _allocBlockIfRequired(bba, sz);
+    Block* block = _allocBlockIfRequired(this, sz);
     if(not block) return NULL;
     U1* out = (U1*)block + block->info.bot;
     block->info.bot += sz;
@@ -402,16 +402,16 @@ void* BBA_alloc(BBA* bba, Slot sz, U2 alignment) {
   }
   // Else grow down (aligned)
   sz = align(sz, FIX_ALIGN(alignment));
-  Block* block = _allocBlockIfRequired(bba, sz);
+  Block* block = _allocBlockIfRequired(this, sz);
   if(not block) return NULL;
   U2* top = &(block->info.top);
   *top -= sz;
   return (U1*)block + (*top);
 }
 
-void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
-  ASSERT(bba->dat, "Free empty BBA");
-  Block* block = BBA_block(bba);
+DEFINE_METHOD(void, BBA,free, void* data, Slot sz, U2 alignment) {
+  ASSERT(this->dat, "Free empty BBA");
+  Block* block = BBA_block(this);
   BlockInfo* info = &block->info;
   ASSERT(( (U1*)block <= (U1*)data )
          and
@@ -429,20 +429,20 @@ void BBA_free(BBA* bba, void* data, Slot sz, U2 alignment) {
   }
 
   if(info->top - info->bot == BLOCK_AVAIL) {
-    BA_free(bba->ba, (BANode*)DllRoot_pop(BBA_asDllRoot(bba)));
+    BA_free(this->ba, (BANode*)DllRoot_pop(BBA_asDllRoot(this)));
   }
 }
 
-Slot BBA_maxAlloc(void* anything) { return BLOCK_AVAIL; }
+DEFINE_METHOD(Slot, BBA,maxAlloc) { return BLOCK_AVAIL; }
 
-/*extern*/ const MArena mBBA = (MArena) {
-  .drop  = Role_METHOD(BBA_drop),
-  .alloc = Role_METHODR(BBA_alloc, /*ret*/void*, Slot,  U2),
-  .free  = Role_METHOD(BBA_free,                 void*, Slot, U2),
-  .maxAlloc = BBA_maxAlloc,
-};
+DEFINE_METHODS(MArena, BBA_mArena,
+  .drop      = M_BBA_drop,
+  .alloc     = M_BBA_alloc,
+  .free      = M_BBA_free,
+  .maxAlloc  = M_BBA_maxAlloc,
+)
 
-Arena BBA_asArena(BBA* d) { return (Arena) { .m = &mBBA, .d = d }; }
+Arena BBA_asArena(BBA* d) { return (Arena) { .m = BBA_mArena(), .d = d }; }
 
 // #################################
 // # File

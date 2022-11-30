@@ -246,59 +246,59 @@ TEST_UNIX(bba, 5)
 END_TEST_UNIX
 
 TEST(fileRead)
-  File f = File_malloc(20);
+  UFile f = UFile_malloc(20);
   Ring* r = &f.ring;
-  File_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
+  UFile_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
   TASSERT_EQ(File_DONE, f.code);
   TASSERT_EQ(0, Ring_len(&f.ring));
   TASSERT_EQ(0, f.ring.head);
 
-  File_readAll(&f);
+  UFile_readAll(&f);
   TASSERT_EQ(19, Ring_len(r));
   assert(f.code == File_DONE);
   assert(0 == memcmp(r->dat, "easy to test text\nw", 19));
 
-  Ring_clear(r); File_readAll(&f);
+  Ring_clear(r); UFile_readAll(&f);
   assert(Ring_len(r) == 19); assert(f.code == File_DONE);
   assert(0 == memcmp(r->dat, "riting a simple hai", 19));
 
   // Now use it like a parser. Inc part of the ring.
-  Ring_incHead(r, 16); File_readAll(&f);
+  Ring_incHead(r, 16); UFile_readAll(&f);
   assert(Ring_len(r) == 19); assert(f.code == File_DONE);
   assert(0 == Ring_cmpSlc(r, Slc_ntLit("haiku\nand the job i")));
 
   // Again, inc part of the ring.
-  Ring_incHead(r, 18); File_readAll(&f);
+  Ring_incHead(r, 18); UFile_readAll(&f);
   TASSERT_EQ(9, Ring_len(r));
   TASSERT_EQ(f.code, File_EOF);
   assert(0 == Ring_cmpSlc(r, Slc_ntLit("is done\n\n")));
-  File_close(&f);
+  UFile_close(&f);
   free(r->dat);
 END_TEST
 
 TEST(fileWrite)
-  File f = File_malloc(20);
+  UFile f = UFile_malloc(20);
   Ring* r = &f.ring;
   Slc path = Slc_ntLit("bin/UFile_test.txt");
-  File_open(&f, path, File_WRONLY | File_CREATE | File_TRUNC);
+  UFile_open(&f, path, File_WRONLY | File_CREATE | File_TRUNC);
   TASSERT_EQ(File_DONE, f.code);
   Ring_extend(r, Slc_ntLit("hello there! My "));
-  File_write(&f);
+  UFile_write(&f);
   TASSERT_EQ(true, Ring_isEmpty(r)); TASSERT_EQ(File_DONE, f.code);
-  File_stop(&f);
+  UFile_stop(&f);
 
   Ring_clear(r);
   Ring_extend(r, Slc_ntLit("name is Joe!"));
-  File_write(&f);
+  UFile_write(&f);
   TASSERT_EQ(File_DONE, f.code);
   TASSERT_EQ(true, Ring_isEmpty(r));
 
-  File_close(&f); Ring_clear(r);
-  File_open(&f, path, File_RDONLY); TASSERT_EQ(f.code, File_DONE);
-  File_read(&f); TASSERT_EQ(f.code, File_DONE);
+  UFile_close(&f); Ring_clear(r);
+  UFile_open(&f, path, File_RDONLY); TASSERT_EQ(f.code, File_DONE);
+  UFile_read(&f); TASSERT_EQ(f.code, File_DONE);
   TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("hello there! My nam")));
 
-  File_close(&f);
+  UFile_close(&f);
   free(r->dat);
 END_TEST
 
