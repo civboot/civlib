@@ -40,14 +40,15 @@ UFile UFile_new(Ring ring);
 void  UFile_readAll(UFile* f);
 
 int UFile_handleErr(UFile* f, int res);
-DECLARE_METHOD(bool, UFile,drop, Arena a);
-DECLARE_METHOD(Sll*, UFile,resourceLL);
-DECLARE_METHOD(void, UFile,open, Slc path, Slot options);
-DECLARE_METHOD(void, UFile,close);
-DECLARE_METHOD(void, UFile,stop);
-DECLARE_METHOD(void, UFile,seek, ISlot offset, U1 whence);
-DECLARE_METHOD(void, UFile,read);
-DECLARE_METHOD(void, UFile,write);
+DECLARE_METHOD(void,      UFile,drop, Arena a);
+DECLARE_METHOD(Sll*,      UFile,resourceLL);
+DECLARE_METHOD(BaseFile*, UFile,asBase);
+DECLARE_METHOD(void,      UFile,open, Slc path, Slot options);
+DECLARE_METHOD(void,      UFile,close);
+DECLARE_METHOD(void,      UFile,stop);
+DECLARE_METHOD(void,      UFile,seek, ISlot offset, U1 whence);
+DECLARE_METHOD(void,      UFile,read);
+DECLARE_METHOD(void,      UFile,write);
 
 File UFile_asFile(UFile* d);
 

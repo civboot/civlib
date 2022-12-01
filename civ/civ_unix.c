@@ -68,16 +68,16 @@ int UFile_handleErr(UFile* f, int res) {
   return res;
 }
 
-DEFINE_METHOD(bool, UFile,drop, Arena a) {
+DEFINE_METHOD(void, UFile,drop, Arena a) {
   if(this->code != File_CLOSED) UFile_close(this);
-  if(this->code != File_CLOSED) return false;
   Xr(a, free, this->ring.dat, this->ring._cap, 1);
-  return true;
 }
 
 DEFINE_METHOD(Sll*, UFile,resourceLL) {
   return (Sll*)this;
 }
+
+DEFINE_METHOD(BaseFile*, UFile,asBase) { return this; }
 
 DEFINE_METHOD(void, UFile,open, Slc path, Slot options) {
   assert(this->code == File_CLOSED);
@@ -157,14 +157,15 @@ void UFile_readAll(UFile* f) {
 }
 
 DEFINE_METHODS(MFile, UFile_mFile,
-  .drop      = M_UFile_drop,
+  .drop       = M_UFile_drop,
   .resourceLL = M_UFile_resourceLL,
-  .open      = M_UFile_open,
-  .close     = M_UFile_close,
-  .stop      = M_UFile_stop,
-  .seek      = M_UFile_seek,
-  .read      = M_UFile_read,
-  .write     = M_UFile_write,
+  .asBase     = M_UFile_asBase,
+  .open       = M_UFile_open,
+  .close      = M_UFile_close,
+  .stop       = M_UFile_stop,
+  .seek       = M_UFile_seek,
+  .read       = M_UFile_read,
+  .write      = M_UFile_write,
 )
 
 File File_asRFile(UFile* d) { return (File) { .m = UFile_mFile(), .d = d }; }

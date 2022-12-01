@@ -409,16 +409,18 @@ DEFINE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment) {
   return (U1*)block + (*top);
 }
 
-DEFINE_METHOD(void, BBA,free, void* data, Slot sz, U2 alignment) {
-  ASSERT(this->dat, "Free empty BBA");
+Slc BBA_free_empty = Slc_ntLit("Free empty BBA");
+Slc BBA_free_below = Slc_ntLit("Data below block");
+Slc BBA_free_above = Slc_ntLit("Data above block");
+
+DEFINE_METHOD(Slc*, BBA,free, void* data, Slot sz, U2 alignment) {
+  if(not this->dat) return &BBA_free_empty;
   Block* block = BBA_block(this);
   BlockInfo* info = &block->info;
-  ASSERT(( (U1*)block <= (U1*)data )
-         and
-         ( (U1*)data + sz <= (U1*)block + BLOCK_AVAIL ),
-         "unordered free: block bounds");
-  U2 plc = (U2)((U1*)data - (U1*)block);
+  if((U1*)block > (U1*)data) return &BBA_free_below;
+  if((U1*)data + sz > (U1*)block + BLOCK_AVAIL) return &BBA_free_above;
 
+  U2 plc = (U2)((U1*)data - (U1*)block);
   if(1 == alignment) {
     ASSERT(plc == info->bot - sz, "unordered free: sz");
     info->bot = plc;
@@ -431,6 +433,7 @@ DEFINE_METHOD(void, BBA,free, void* data, Slot sz, U2 alignment) {
   if(info->top - info->bot == BLOCK_AVAIL) {
     BA_free(this->ba, (BANode*)DllRoot_pop(BBA_asDllRoot(this)));
   }
+  return NULL;
 }
 
 DEFINE_METHOD(Slot, BBA,maxAlloc) { return BLOCK_AVAIL; }

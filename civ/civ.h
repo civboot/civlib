@@ -392,9 +392,7 @@ void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]);
 typedef struct {
   void  (*drop)            (void* d);
   void* (*alloc)           (void* d, Slot sz, U2 alignment);
-  // TODO: make free falible. In some cases (like dropping resource before
-  // dropping arenas) success doesn't matter!
-  void  (*free)            (void* d, void* dat, Slot sz, U2 alignment);
+  Slc*  (*free)            (void* d, void* dat, Slot sz, U2 alignment);
   Slot  (*maxAlloc)        (void* d);
 } MArena;
 
@@ -447,7 +445,9 @@ Arena    BBA_asArena(BBA* b);
 DECLARE_METHOD(void, BBA,drop);   // BBA_drop
 DECLARE_METHOD(Slot , BBA,spare); // BBA_spare
 DECLARE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment); // BBA_alloc
-DECLARE_METHOD(void , BBA,free , void* data, Slot sz, U2 alignment); // BBA_free
+
+// BBA_free: return any error slc.
+DECLARE_METHOD(Slc* , BBA,free , void* data, Slot sz, U2 alignment); // BBA_free
 DECLARE_METHOD(Slot , BBA,maxAlloc); // BBA_maxAlloc
 
 MArena* mBBAGet();
@@ -508,8 +508,11 @@ typedef struct {
 
 typedef struct {
   // Resource methods
-  bool (*drop)            (void* d, Arena a);
+  void (*drop)            (void* d, Arena a);
   Sll* (*resourceLL)      (void* d);
+
+  // Get the base file pointer.
+  BaseFile* (*asBase) (void* d);
 
   // Close a file
   void (*close) (void* d);
