@@ -63,11 +63,12 @@ extern const U1* emptyNt; // empty null-terminated string
 
 // ####
 // # Core Structs
-typedef struct { U1* dat; U2 len;                    } Slc;
-typedef struct { U1* dat; U2 len; U2 cap;            } Buf;
-typedef struct { U1* dat; U2 len; U2 cap; U2 plc;    } PlcBuf;
-typedef struct { U1 count; U1 dat[];                 } CStr;
-typedef struct { U1* dat; U2 head; U2 tail; U2 _cap; } Ring;
+typedef struct { U1*   dat;   U2 len;                    } Slc;
+typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
+typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
+typedef struct { Slot* dat;   U2 sp;   U2 cap;           } Stk;
+typedef struct { U1    count; U1 dat[];                  } CStr;
+typedef struct { U1*   dat;   U2 head; U2 tail; U2 _cap; } Ring;
 
 typedef struct _Sll {
   struct _Sll* next;
@@ -151,6 +152,21 @@ Buf* PlcBuf_asBuf(PlcBuf*);
 // Attempt to extend Buf. Return true if there is not enough space.
 bool Buf_extend(Buf* b, Slc s);
 bool Buf_extendNt(Buf* b, U1* s);
+
+// #################################
+// # Stk: efficient first-in last-out buffer.
+// Stacks "grow down" so that indexes can be accessed using positive offsets.
+
+// Initialize the stack. The cap must be the total number of Slots
+// (NOT the size in bytes)
+#define Stk_init(DAT, CAP) (Stk) (Stk) {.dat = DAT, .sp = CAP, .cap = CAP}
+#define Stk_clear(STK)     ((STK).sp = (STK).cap)
+
+// Get the number of slots in use.
+#define Stk_len(STK)             ((STK).cap - (STK).sp)
+
+Slot Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
+void Stk_add(Stk* stk, Slot value); // add a value to the stack
 
 // #################################
 // # Ring: a lock-free ring buffer.
@@ -283,6 +299,7 @@ Bst* Bst_add(Bst** root, Bst* add);
   typeof(EXPECT) __result = CODE; \
   if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
   assert((EXPECT) == __result); }
+#define TASSERT_STK(EXPECT, STK)  TASSERT_EQ(EXPECT, Stk_pop(STK))
 
 // Macro expansion shenanigans. Note that a plain foo ## __LINE__ expands to the
 // literal string "foo__LINE__", when you wanted "foo362" (when line=362)

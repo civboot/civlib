@@ -109,6 +109,19 @@ void PlcBuf_shift(PlcBuf* buf) {
 }
 
 // #################################
+// # Stk: efficient first-in last-out buffer.
+
+Slot Stk_pop(Stk* stk) {
+  ASSERT(stk->sp < stk->cap, "Stk underflow");
+  return stk->dat[stk->sp ++];
+}
+
+void Stk_add(Stk* stk, Slot value) {
+  ASSERT(stk->sp, "Stk overflow");
+  stk->dat[-- stk->sp] = value;
+}
+
+// #################################
 // # Ring: a lock-free ring buffer.
 
 U2 Ring_len(Ring* r) {

@@ -62,6 +62,19 @@ TEST(plcBuf)
   TASSERT_EQ(0, Slc_cmp(*PlcBuf_asSlc(&pb), Slc_ntLit("bar baz")));
 END_TEST
 
+TEST(stk)
+  Slot dat[3];
+  Stk s = Stk_init(dat, 3);
+  TASSERT_EQ((Slot*)dat, s.dat); TASSERT_EQ(3, s.sp); TASSERT_EQ(3, s.cap);
+  EXPECT_ERR(Stk_pop(&s));
+  Stk_add(&s, 3);
+  TASSERT_EQ(3, dat[2]); TASSERT_EQ(2, s.sp);
+  TASSERT_EQ(3, Stk_pop(&s));
+  Stk_add(&s, 1);      Stk_add(&s, 2);     Stk_add(&s, 42);
+  EXPECT_ERR(Stk_add(&s, 0xFF));
+  TASSERT_STK(42, &s); TASSERT_STK(2, &s); TASSERT_STK(1, &s);
+END_TEST
+
 TEST(ring)
   U1 dat[10];
   Ring r = (Ring) { .dat = dat, ._cap = 10 };
@@ -307,6 +320,7 @@ int main() {
   test_basic();
   test_slc();
   test_plcBuf();
+  test_stk();
   test_ring();
   test_sll();
   test_dll();
