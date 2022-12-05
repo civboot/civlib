@@ -77,13 +77,18 @@ END_TEST
 
 TEST(ring)
   U1 dat[10];
-  Ring r = (Ring) { .dat = dat, ._cap = 10 };
+  Ring r = Ring_init(dat, 10);
+  TASSERT_EQ(9, Ring_cap(&r));
+  TASSERT_EQ(true,  Ring_isEmpty(&r));
+  TASSERT_EQ(false, Ring_isFull(&r));
   TASSERT_EQ(0, Ring_len(&r));
   Slc avail = Ring_avail(&r);
   TASSERT_EQ(9, avail.len);
   assert(dat == avail.dat);
 
   Ring_push(&r, 'a');
+  TASSERT_EQ(false, Ring_isEmpty(&r));
+  TASSERT_EQ(false, Ring_isFull(&r));
   TASSERT_EQ(1, Ring_len(&r));
   TASSERT_EQ(0, r.head); TASSERT_EQ(1, r.tail);
   TASSERT_EQ('a', dat[0]);
@@ -111,12 +116,17 @@ TEST(ring)
   EXPECT_ERR( Ring_extend(&r, Slc_ntLit("WXY")) );
   TASSERT_EQ(8, Ring_len(&r));
 
+  // Fill up
+  Ring_push(&r, 'e');
+  TASSERT_EQ(false, Ring_isEmpty(&r));
+  TASSERT_EQ(true, Ring_isFull(&r));
+
   // Wrap around write
   assert(dat + 1 == Ring_next(&r));
   TASSERT_EQ(2, r.head);
   r.head = 4;
-  TASSERT_EQ(5, Ring_len(&r));
-  Ring_extend(&r, Slc_ntLit("efgh"));
+  TASSERT_EQ(6, Ring_len(&r));
+  Ring_extend(&r, Slc_ntLit("fgh"));
   TASSERT_EQ(9, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
   TASSERT_EQ(0, memcmp(dat, "fgh", 3));
@@ -133,7 +143,7 @@ TEST(ring)
   TASSERT_EQ(5, Ring_len(&r));
   assert(dat + 8 == Ring_next(&r));
   assert(dat + 9 == Ring_next(&r));
-  assert(dat     == Ring_next(&r));
+  TASSERT_EQ('f', Ring_pop(&r));
   TASSERT_EQ(2, Ring_len(&r));
 END_TEST
 

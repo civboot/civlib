@@ -113,10 +113,17 @@ void srBE(U1* p, Slot size, U4 value);
 
 // ##
 // # min/max
-U4   U4_min(U4 a, U4 b);
-Slot Slot_min(Slot a, Slot b);
-U4   U4_max(U4 a, U4 b);
-Slot Slot_max(Slot a, Slot b);
+#define MIN_DEF { if(a < b) return a; return b; }
+static inline U4   U4_min (U4  a, U4  b) MIN_DEF
+static inline Slot Slot_min(Slot a, Slot b) MIN_DEF
+
+#define MAX_DEF { if(a < b) return a; return b; }
+static inline U4   U4_max (U4  a, U4  b) MAX_DEF
+static inline Slot Slot_max(Slot a, Slot b) MAX_DEF
+
+// ##
+// # div
+static inline U4 U4_ceil(U4 a, U4 b) { return (a / b) + (a % b != 0); }
 
 // #################################
 // # Slc: data slice of up to 64KiB indexes (0x10,000)
@@ -171,14 +178,17 @@ void Stk_add(Stk* stk, Slot value); // add a value to the stack
 // #################################
 // # Ring: a lock-free ring buffer.
 // Data is written to the tail and read from the head.
+#define Ring_init(dat, datLen)   (Ring){.dat = dat, ._cap = datLen}
+#define Ring_drop(RING, ARENA)   Xr(ARENA, free, (RING)->dat, (RING)->_cap, 1)
 
-static inline bool Ring_isEmpty(Ring* r) { return r->head     == r->tail; }
-static inline bool Ring_isFull(Ring* r)  { return r->head + 1 == r->tail; }
+#define Ring_isEmpty(R)     ((R)->tail     == (R)->head)
+#define Ring_isFull(R)      ((R)->tail + 1 == (R)->head)
 
 U2   Ring_len(Ring* r);
 
 // The capacity of the Ring is one less than the buffer capacity.
-#define Ring_cap(RING)   ((RING)._cap - 1)
+#define Ring_cap(RING)    ((RING)->_cap - 1)
+#define Ring_remain(RING) (Ring_cap(RING) - Ring_len(RING))
 
 static inline void Ring_clear(Ring* r) { r->head = 0; r->tail = 0; }
 
@@ -187,7 +197,8 @@ static inline void Ring_clear(Ring* r) { r->head = 0; r->tail = 0; }
 // Typically this is used like:  while(( c = Ring_next(r) )) { ... }
 U1*  Ring_next(Ring* r);
 
-// These return true if the buffer is not large enough.
+// Warning: Panics if length not sufficient
+U1     Ring_pop(Ring* r); 
 void   Ring_push(Ring* r, U1 c);
 void   Ring_extend(Ring* r, Slc s);
 
@@ -278,12 +289,12 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 // Compiler state to disable error logs when expecting an error.
 #define TEST(NAME) \
-  void test_ ## NAME () {                 \
-    jmp_buf localErrJmp;                  \
-    Civ_init();                           \
-    civ.fb->errJmp = &localErrJmp;        \
-    eprintf("## Testing " #NAME "...\n"); \
-    if(setjmp(localErrJmp)) {             \
+  void test_ ## NAME () {                  \
+    jmp_buf localErrJmp;                   \
+    Civ_init();                            \
+    civ.fb->errJmp = &localErrJmp;         \
+    eprintf("## Testing " #NAME "...\n");  \
+    if(setjmp(localErrJmp)) {              \
       if(civ.errPrinter) civ.errPrinter(); \
       else defaultErrPrinter();            \
       exit(1);                             \

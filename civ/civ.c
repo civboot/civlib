@@ -49,16 +49,6 @@ void srBE(U1* p, Slot size, U4 value) { // store Big Endian
 }
 
 // ##
-// # min/max
-#define MIN_DEF { if(a < b) return a; return b; }
-U4   U4_min (U4  a, U4  b) MIN_DEF
-Slot Slot_min(Slot a, Slot b) MIN_DEF
-
-#define MAX_DEF { if(a < b) return a; return b; }
-U4   U4_max (U4  a, U4  b) MAX_DEF
-Slot Slot_max(Slot a, Slot b) MAX_DEF
-
-// ##
 // # Slc
 Slc Slc_frNt(U1* s)     { return (Slc) { .dat = s,      .len = strlen(s) }; }
 Slc Slc_frCStr(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
@@ -146,8 +136,16 @@ U1* Ring_next(Ring* r) {
   return out;
 }
 
+U1 Ring_pop(Ring* r) {
+  ASSERT(not Ring_isEmpty(r), "Ring pop: empty");
+  U1 c = r->dat[r->head];
+  Ring_wrapHead(r);
+  return c;
+}
+
 void Ring_push(Ring* r, U1 c) {
-  ASSERT(r->head + 1 != r->tail, "Ring push: already full");
+  eprintf("Ring push: %X\n", c);
+  ASSERT(not Ring_isFull(r), "Ring push: already full");
   r->dat[r->tail] = c;
   Ring_wrapTail(r);
 }

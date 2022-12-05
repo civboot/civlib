@@ -114,7 +114,7 @@ DEFINE_METHOD(void, UFile,read) {
   Ring* r = &this->ring;
   if(!(File_INDEX & this->fid)) { // mocked file.
     PlcBuf* p = (PlcBuf*) this->fid;
-    len = U4_min(p->len - p->plc, Ring_cap(*r) - Ring_len(r));
+    len = U4_min(p->len - p->plc, Ring_cap(r) - Ring_len(r));
     Ring_extend(r, (Slc){p->dat, len});
     p->plc += len;
   } else {
@@ -127,7 +127,7 @@ DEFINE_METHOD(void, UFile,read) {
     }
   }
   this->pos += len;
-  if(Ring_len(r) == Ring_cap(*r)) this->code = File_DONE;
+  if(Ring_len(r) == Ring_cap(r)) this->code = File_DONE;
   else if (0 == len)              this->code = File_EOF;
 }
 
