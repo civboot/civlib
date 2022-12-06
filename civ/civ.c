@@ -169,23 +169,23 @@ Slc Ring_avail(Ring* r) {
   return (Slc){r->dat + r->tail, r->head - r->tail - 1};
 }
 
-Slc Ring_first(Ring* r) {
+Slc Ring_1st(Ring* r) {
   if(r->tail >= r->head) {
     return (Slc) { .dat = r->dat + r->head, .len = r->tail - r->head };
   }
   return (Slc) { .dat = r->dat + r->head, .len = r->_cap - r->head };
 }
 
-Slc Ring_second(Ring* r) {
+Slc Ring_2nd(Ring* r) {
   if(r->tail >= r->head) return (Slc){0};
   return (Slc) { .dat = r->dat, .len = r->tail };
 }
 
 I4 Ring_cmpSlc(Ring* r, Slc s) {
-  Slc first = Ring_first(r);
+  Slc first = Ring_1st(r);
   I4 cmp = Slc_cmp(first, (Slc){s.dat, first.len});
   if(cmp) return cmp;
-  return Slc_cmp(Ring_second(r), (Slc){s.dat + first.len, s.len - first.len});
+  return Slc_cmp(Ring_2nd(r), (Slc){s.dat + first.len, s.len - first.len});
 }
 
 // ##
@@ -437,9 +437,18 @@ Arena BBA_asArena(BBA* d) { return (Arena) { .m = BBA_mArena(), .d = d }; }
 
 // #################################
 // # BufFile
+void File_panicOpen(void* d, Slc path, Slot options) {
+  SET_ERR(Slc_ntLit("Open not supported."));
+}
+void File_panic(void* d) { SET_ERR(Slc_ntLit("Unsuported file method.")); }
+void File_noop(void* d)  {}
 
 DEFINE_METHOD(void      , BufFile,drop, Arena a) {
   PlcBuf_free(&this->b, a);
+}
+
+DEFINE_METHOD(Sll*      , BufFile,resourceLL) {
+  return (Sll*)&this->nextResource;
 }
 
 DEFINE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence) {
@@ -453,7 +462,7 @@ DEFINE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence) {
 }
 
 DEFINE_METHOD(void      , BufFile,read) {
-  assert(this->code == File_READING || this->code >= File_DONE);
+  ASSERT(this->code == File_READING || this->code >= File_DONE, "File operation out of order");
   Ring* r = &this->ring;
   PlcBuf* b = &this->b;
   Slc avail = Ring_avail(r);
@@ -471,11 +480,27 @@ DEFINE_METHOD(BaseFile* , BufFile,asBase) {
 }
 
 DEFINE_METHOD(void      , BufFile,write) {
-  assert(this->code == File_WRITING || this->code >= File_DONE);
+  ASSERT(this->code == File_WRITING || this->code >= File_DONE, "File operation out of order");
   this->code = File_WRITING;
   Ring* r = &this->ring; PlcBuf* b = &this->b;
-  Slc s = Ring_first(r);
+  Slc s = Ring_1st(r);
   Buf_extend(PlcBuf_asBuf(b), s);
   Ring_incHead(r, s.len);
   if(Ring_isEmpty(r)) this->code = File_DONE;
+}
+
+DEFINE_METHODS(MFile, BufFile_mFile,
+  .drop       = M_BufFile_drop,
+  .resourceLL = M_BufFile_resourceLL,
+  .asBase     = M_BufFile_asBase,
+  .open       = File_panicOpen,
+  .close      = File_noop,
+  .stop       = File_noop,
+  .seek       = M_BufFile_seek,
+  .read       = M_BufFile_read,
+  .write      = M_BufFile_write,
+)
+
+File BufFile_asFile(BufFile* d) {
+  return (File) { .m = BufFile_mFile(), .d = d };
 }

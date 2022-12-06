@@ -113,8 +113,8 @@ TEST(ring)
   Ring_extend(&r, Slc_ntLit("ABCD"));
   TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_first(&r)));
-  TASSERT_EQ(0, Ring_second(&r).len);
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_1st(&r)));
+  TASSERT_EQ(0, Ring_2nd(&r).len);
   TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("bcdeABCD")));
   avail = Ring_avail(&r);
   TASSERT_EQ(1, avail.len); assert(dat + 9 == avail.dat);
@@ -140,8 +140,8 @@ TEST(ring)
   avail = Ring_avail(&r);
   TASSERT_EQ(0, avail.len); assert(dat + 3 == avail.dat);
 
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("eABCDe"), Ring_first(&r)));
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("fgh"), Ring_second(&r)));
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("eABCDe"), Ring_1st(&r)));
+  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("fgh"), Ring_2nd(&r)));
   TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("eABCDefgh")));
   TASSERT_EQ(1, Ring_cmpSlc(&r, Slc_ntLit("aABCDefgh")));
 
@@ -279,6 +279,31 @@ TEST_UNIX(bba, 5)
   TASSERT_EQ(5, civ.ba.len);
 END_TEST_UNIX
 
+TEST(bufFile)
+  BufFile_var(f, 16, PlcBuf_ntLit("Civboot is the foundation of a simpler technology."));
+  Ring* r = &f.ring;
+
+  TASSERT_EQ(50, f.b.len);
+  BufFile_read(&f);
+  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("Civboot is the f")));
+  TASSERT_EQ(16, f.b.plc);
+
+  Ring_incHead(r, 6);
+  BufFile_read(&f);
+  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("t is the fo")));
+  BufFile_read(&f);
+  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("t is the foundat")));
+  TASSERT_EQ(22, f.b.plc);
+
+  Ring_clear(r);
+  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("ion of a simpler")));
+
+  Ring_clear(r);
+  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit(" technology.")));
+  TASSERT_EQ(File_EOF, f.code);
+  EXPECT_ERR(BufFile_read(&f));
+END_TEST
+
 TEST(fileRead)
   UFile f = UFile_malloc(20);
   Ring* r = &f.ring;
@@ -349,6 +374,7 @@ int main() {
   test_bst();
   test_ba();
   test_bba();
+  test_bufFile();
   test_fileRead();
   test_fileWrite();
   eprintf("# Tests All Pass\n");

@@ -30,8 +30,6 @@ typedef struct {
   Slot      fid;      // file id or reference
 } UFile;
 
-extern const MFile mFile;
-
 #define File_RDWR      O_RDWR
 #define File_RDONLY    O_RDONLY
 #define File_WRONLY    O_WRONLY

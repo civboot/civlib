@@ -1,11 +1,14 @@
+CC=gcc
+FLAGS=-m32
+DISABLE_WARNINGS=-Wno-pointer-sign -Wno-format
+FILES=civ/*.c
+OUT=bin/a.out
 
 all: test
-
-DISABLE_WARNINGS=-Wno-pointer-sign -Wno-format
 
 test: build
 	./bin/a.out
 
 build:
 	mkdir -p bin/
-	gcc -m32 -Wall $(DISABLE_WARNINGS) civ/*.c -o bin/a.out
+	$(CC) $(FLAGS) -Wall $(DISABLE_WARNINGS) $(FILES) -o $(OUT)

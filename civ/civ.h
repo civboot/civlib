@@ -151,10 +151,10 @@ U2   Slc_move(Slc to, Slc from);
 
 // Use this with printf using the '%.*s' format, like so:
 //
-//   printf("Printing my slice: %.*s\n", Dat_printf(slc));
+//   printf("Printing my slice: %.*s\n", Dat_fmt(slc));
 //
 // This is safe to use with CStr, Buf and PlcBuf.
-#define Dat_printf(DAT)   (DAT).len, (DAT).dat
+#define Dat_fmt(DAT)   (DAT).len, (DAT).dat
 
 // #################################
 // # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
@@ -191,7 +191,7 @@ void Stk_add(Stk* stk, Slot value); // add a value to the stack
 // #################################
 // # Ring: a lock-free ring buffer.
 // Data is written to the tail and read from the head.
-#define Ring_init(dat, datLen)   (Ring){.dat = dat, ._cap = datLen}
+#define Ring_init(DAT, datLen)   (Ring){.dat = DAT, ._cap = datLen}
 #define Ring_var(NAME, CAP)     \
   U1 LINED(_ringDat)[CAP + 1]; Ring NAME = Ring_init(LINED(_ring), CAP + 1)
 #define Ring_drop(RING, ARENA)   Xr(ARENA, free, (RING)->dat, (RING)->_cap, 1)
@@ -231,8 +231,11 @@ static inline void Ring_incTail(Ring* r, U2 inc) {
 // This API is for:
 // 1. Get the first "chunk" of data and use some amount of it.
 // 2. incHead by the amount used.
-Slc Ring_first(Ring* r);
-Slc Ring_second(Ring* r);
+#define Ring_fmt1(R)  Dat_fmt(Ring_1st(R))
+#define Ring_fmt2(R)  Dat_fmt(Ring_2nd(R))
+
+Slc Ring_1st(Ring* r);
+Slc Ring_2nd(Ring* r);
 static inline void Ring_incHead(Ring* r, U2 inc) {
   r->head = (r->head + inc) % r->_cap;
 }
@@ -627,16 +630,19 @@ static inline Resource* File_asResource(File* f) {
 
 #define File_ERROR    0xE0
 #define File_EIO      0xE2
-#endif // __CIV_H
+void File_panicOpen(void* d, Slc, Slot); // unsuported open
+void File_panic(void* d); // used to panic for unsported method
+void File_noop(void* d);  // used as noop for some file methods
+
 
 // #################################
 // # BufFile
 // A file backed by a buffer.
 
 typedef struct {
-  Sll*      nextResource; // resource SLL
-  Ring      ring;         // buffer for reading or writing data
-  U2        code;         // status or error (File_*)
+  Sll*      nextResource;
+  Ring      ring;
+  U2        code;
   PlcBuf    b;
 } BufFile;
 
@@ -644,15 +650,15 @@ typedef struct {
   U1 LINED(_ringDat)[ringCap + 1];                      \
   BufFile NAME = (BufFile) {                            \
     .ring = Ring_init(LINED(_ringDat), ringCap + 1),    \
-    .buf = plcBuf,                                      \
+    .b = plcBuf, .code = File_DONE,                     \
   }
 
-void File_panic(void* d); // used to panic for some file methods
-void File_noop(void* d);  // used as noop for some file methods
-
 DECLARE_METHOD(void      , BufFile,drop, Arena a);
+DECLARE_METHOD(Sll*      , BufFile,resourceLL);
 DECLARE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence);
 DECLARE_METHOD(void      , BufFile,read);
 DECLARE_METHOD(BaseFile* , BufFile,asBase);
 DECLARE_METHOD(void      , BufFile,write);
+File BufFile_asFile(BufFile* d);
 
+#endif // __CIV_H

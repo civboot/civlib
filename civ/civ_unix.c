@@ -124,7 +124,7 @@ DEFINE_METHOD(void, UFile,write) {
   assert(this->code == File_WRITING || this->code >= File_DONE);
   this->code = File_WRITING;
   Ring* r = &this->ring;
-  Slc first = Ring_first(r);
+  Slc first = Ring_1st(r);
   this->code = File_WRITING;
   int len = write(this->fid, first.dat, first.len);
   len     = UFile_handleErr(this, len);
