@@ -4,8 +4,6 @@
 
 /*extern*/ CivUnix civUnix          = (CivUnix) {};
 
-#define File_FD(F)      ((~File_INDEX) & (F).fid)
-
 void CivUnix_init(Slot numBlocks) {
   CivUnix_allocBlocks(numBlocks);
   civ.fb->err.len = 0;
@@ -77,7 +75,7 @@ DEFINE_METHOD(Sll*, UFile,resourceLL) {
   return (Sll*)this;
 }
 
-DEFINE_METHOD(BaseFile*, UFile,asBase) { return this; }
+DEFINE_METHOD(BaseFile*, UFile,asBase) { return (BaseFile*) this; }
 
 DEFINE_METHOD(void, UFile,open, Slc path, Slot options) {
   assert(this->code == File_CLOSED);
@@ -87,46 +85,37 @@ DEFINE_METHOD(void, UFile,open, Slc path, Slot options) {
   pathname[path.len] = 0;
   int fd = UFile_handleErr(this, open(pathname, O_NONBLOCK | options, 0666));
   if(fd < 0) return;
-  this->pos = 0; this->fid = File_INDEX | fd;
+  this->fid = fd;
   this->ring.head = 0; this->ring.tail = 0; this->code = File_DONE;
 }
 
 DEFINE_METHOD(void, UFile,close) {
   assert(this->code >= File_DONE);
-  if(close(File_FD(*this))) this->code = File_ERROR;
-  else                      this->code = File_CLOSED;
+  if(close(this->fid)) this->code = File_ERROR;
+  else                 this->code = File_CLOSED;
 }
 
 DEFINE_METHOD(void, UFile,stop) {
-  fsync(File_FD(*this));
+  fsync(this->fid);
   this->code = File_DONE;
 }
 
 DEFINE_METHOD(void, UFile,seek, ISlot offset, U1 whence) {
   assert(this->code >= File_DONE);
-  // TODO: handle mocked file.
-  UFile_handleErr(this, lseek(File_FD(*this), offset, whence));
+  UFile_handleErr(this, lseek(this->fid, offset, whence));
 }
 
 DEFINE_METHOD(void, UFile,read) {
   assert(this->code == File_READING || this->code >= File_DONE);
   int len = 0;
   Ring* r = &this->ring;
-  if(!(File_INDEX & this->fid)) { // mocked file.
-    PlcBuf* p = (PlcBuf*) this->fid;
-    len = U4_min(p->len - p->plc, Ring_cap(r) - Ring_len(r));
-    Ring_extend(r, (Slc){p->dat, len});
-    p->plc += len;
-  } else {
-    this->code = File_READING;
-    Slc avail = Ring_avail(r);
-    if(avail.len) {
-      len = read(File_FD(*this), avail.dat, avail.len);
-      len = UFile_handleErr(this, len);  assert(len >= 0);
-      Ring_incTail(r, len);
-    }
+  this->code = File_READING;
+  Slc avail = Ring_avail(r);
+  if(avail.len) {
+    len = read(this->fid, avail.dat, avail.len);
+    len = UFile_handleErr(this, len);  assert(len >= 0);
+    Ring_incTail(r, len);
   }
-  this->pos += len;
   if(Ring_len(r) == Ring_cap(r)) this->code = File_DONE;
   else if (0 == len)              this->code = File_EOF;
 }
@@ -137,15 +126,9 @@ DEFINE_METHOD(void, UFile,write) {
   Ring* r = &this->ring;
   Slc first = Ring_first(r);
   int len;
-  if(!(File_INDEX & this->fid)) { // mocked file.
-    PlcBuf* p = (PlcBuf*) this->fid;
-    len = U4_min(p->cap - p->len, first.len);
-    Buf_extend(PlcBuf_asBuf(p), (Slc){first.dat, len});
-  } else {
-    this->code = File_WRITING;
-    len = write(File_FD(*this), first.dat, first.len);
-    len = UFile_handleErr(this, len);  assert(len >= 0);
-  }
+  this->code = File_WRITING;
+  len = write(this->fid, first.dat, first.len);
+  len = UFile_handleErr(this, len);  assert(len >= 0);
   if(len == Ring_len(r)) this->code = File_DONE;
   Ring_incHead(r, len);
 }

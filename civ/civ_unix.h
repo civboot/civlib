@@ -4,8 +4,6 @@
 #include <fcntl.h>  // creat, open
 #include "./civ.h"
 
-#define File_FD(F)      ((~File_INDEX) & (F).fid)
-
 #define TEST_UNIX(NAME, numBlocks) \
   TEST(NAME)                       \
   CivUnix_init(numBlocks);
@@ -25,7 +23,12 @@ void CivUnix_drop();
 void CivUnix_allocBlocks(Slot numBlocks);
 
 // File
-#define UFile BaseFile
+typedef struct {
+  Sll*      nextResource; // resource SLL
+  Ring      ring;     // buffer for reading or writing data
+  U2        code;     // status or error (File_*)
+  Slot      fid;      // file id or reference
+} UFile;
 
 extern const MFile mFile;
 

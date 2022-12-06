@@ -528,10 +528,8 @@ void Civ_init();
 
 typedef struct {
   Sll*      nextResource; // resource SLL
-  Slot      pos;      // current position in file. If seek: desired position.
-  Slot      fid;      // file id or reference
-  Ring      ring;     // buffer for reading or writing data
-  U2        code;     // status or error (File_*)
+  Ring      ring;         // buffer for reading or writing data
+  U2        code;         // status or error (File_*)
 } BaseFile;
 
 typedef struct {
@@ -563,9 +561,6 @@ typedef struct {
 
 typedef struct { const MFile* m; void* d; } File;  // Role
 Resource* File_asResource(File*);
-
-// If set it is a real "file index/id"
-#define File_INDEX      ((Slot)1 << ((sizeof(Slot) * 8) - 1))
 
 #define File_CLOSED   0x00
 
