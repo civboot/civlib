@@ -66,28 +66,24 @@ I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
   return 0;
 }
 
+U2 Slc_move(Slc to, Slc from) {
+  if(to.len > from.len) {
+    memmove(to.dat, from.dat, from.len);
+    return from.len;
+  }
+  memmove(to.dat, from.dat, to.len);
+  return to.len;
+}
+
 // ##
 // # Buf + PlcBuf
-DEFINE_AS(Buf,    /*as*/Slc);
-DEFINE_AS(PlcBuf, /*as*/Slc);
-DEFINE_AS(PlcBuf, /*as*/Buf);
-
-Buf Buf_new(Arena arena, U2 cap) {
-  return (Buf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap, };
-}
-
-PlcBuf PlcBuf_new(Arena arena, U2 cap) {
-  return (PlcBuf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap };
-}
-
-bool Buf_extend(Buf* b, Slc s) {
-  if(b->cap < b->len + s.len) return true;
+void Buf_extend(Buf* b, Slc s) {
+  ASSERT(b->cap >= b->len + s.len, "Buf extend OOB");
   memcpy(b->dat + b->len, s.dat, s.len);
   b->len += s.len;
-  return false;
 }
 
-bool Buf_extendNt(Buf* b, U1* s) {
+void Buf_extendNt(Buf* b, U1* s) {
   return Buf_extend(b, Slc_frNt(s));
 }
 
@@ -120,13 +116,11 @@ U2 Ring_len(Ring* r) {
 }
 
 static inline void Ring_wrapHead(Ring* r) {
-  r->head += 1;
-  if(r->head >= r->_cap) r->head = 0;
+  r->head = (r->head + 1) % r->_cap;
 }
 
 static inline void Ring_wrapTail(Ring* r) {
-  r->tail += 1;
-  if(r->tail >= r->_cap) r->tail = 0;
+  r->tail = (r->tail + 1) % r->_cap;
 }
 
 U1* Ring_next(Ring* r) {
@@ -144,7 +138,6 @@ U1 Ring_pop(Ring* r) {
 }
 
 void Ring_push(Ring* r, U1 c) {
-  eprintf("Ring push: %X\n", c);
   ASSERT(not Ring_isFull(r), "Ring push: already full");
   r->dat[r->tail] = c;
   Ring_wrapTail(r);
@@ -174,20 +167,6 @@ Slc Ring_avail(Ring* r) {
     return (Slc){r->dat + r->tail, r->_cap - r->tail - (not r->head)};
   }
   return (Slc){r->dat + r->tail, r->head - r->tail - 1};
-}
-
-void Ring_incTail(Ring* r, U2 inc) {
-  r->tail += inc;
-  if(r->tail >= r->_cap) {
-    r->tail -= r->_cap;
-  }
-}
-
-void Ring_incHead(Ring* r, U2 inc) {
-  r->head += inc;
-  if(r->head >= r->_cap) {
-    r->head -= r->_cap;
-  }
 }
 
 Slc Ring_first(Ring* r) {
@@ -367,8 +346,6 @@ void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]) {
 // # BBA: Block Bump Arena
 DllRoot* BBA_asDllRoot(BBA* bba) { return (DllRoot*)&bba->dat; }
 
-DEFINE_AS(Arena,  /*as*/Resource);
-
 DEFINE_METHOD(void, BBA,drop) {
   BA_freeAll(this->ba, this->dat);
   this->dat = NULL;
@@ -459,5 +436,46 @@ DEFINE_METHODS(MArena, BBA_mArena,
 Arena BBA_asArena(BBA* d) { return (Arena) { .m = BBA_mArena(), .d = d }; }
 
 // #################################
-// # File
-// DEFINE_AS(RFile,  /*as*/Resource);
+// # BufFile
+
+DEFINE_METHOD(void      , BufFile,drop, Arena a) {
+  PlcBuf_free(&this->b, a);
+}
+
+DEFINE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence) {
+  if(File_seek_SET == whence) {
+    ASSERT(offset >= 0, "SET: offset must be >=0");
+    ASSERT(offset < this->b.len, "SET: offset must be < buf.len");
+    this->b.plc = offset;
+  } else {
+    assert(false); // TODO: not implemented
+  }
+}
+
+DEFINE_METHOD(void      , BufFile,read) {
+  assert(this->code == File_READING || this->code >= File_DONE);
+  Ring* r = &this->ring;
+  PlcBuf* b = &this->b;
+  Slc avail = Ring_avail(r);
+  if(avail.len) {
+    U2 moved = Slc_move(avail, PlcBuf_plcAsSlc(b));
+    Ring_incTail(r, moved);
+    b->plc += moved;
+  }
+  if     (b->plc >= b->len) this->code = File_EOF;
+  else if(Ring_isFull(r))   this->code = File_DONE;
+}
+
+DEFINE_METHOD(BaseFile* , BufFile,asBase) {
+  return (BaseFile*) &this->ring;
+}
+
+DEFINE_METHOD(void      , BufFile,write) {
+  assert(this->code == File_WRITING || this->code >= File_DONE);
+  this->code = File_WRITING;
+  Ring* r = &this->ring; PlcBuf* b = &this->b;
+  Slc s = Ring_first(r);
+  Buf_extend(PlcBuf_asBuf(b), s);
+  Ring_incHead(r, s.len);
+  if(Ring_isEmpty(r)) this->code = File_DONE;
+}

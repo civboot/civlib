@@ -53,6 +53,13 @@ TEST(slc)
   TASSERT_EQ(0, Slc_cmp(c, c0));
 END_TEST
 
+TEST(buf)
+  Buf_var(b, 10);
+  TASSERT_EQ(0, b.len); TASSERT_EQ(10, b.cap);
+  Buf_extend(&b, Slc_ntLit("hello"));
+  TASSERT_EQ(5, b.len);
+END_TEST
+
 TEST(plcBuf)
   char dat[] = "foo bar baz";
   PlcBuf pb = (PlcBuf){.dat = dat, .len = 11, .cap = 11};
@@ -145,6 +152,10 @@ TEST(ring)
   assert(dat + 9 == Ring_next(&r));
   TASSERT_EQ('f', Ring_pop(&r));
   TASSERT_EQ(2, Ring_len(&r));
+
+  // Test an already full Ring
+  r.head = 0; r.tail = r._cap - 1;
+  TASSERT_EQ(true, Ring_isFull(&r));
 END_TEST
 
 TEST(sll)
@@ -329,6 +340,7 @@ int main() {
   eprintf("# Starting Tests\n");
   test_basic();
   test_slc();
+  test_buf();
   test_plcBuf();
   test_stk();
   test_ring();

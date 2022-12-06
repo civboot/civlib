@@ -35,10 +35,6 @@
 
 #define eprintf(F, ...)   fprintf(stderr, F __VA_OPT__(,) __VA_ARGS__)
 
-// TO asTO(FROM);
-#define DEFINE_AS(FROM, TO) \
-  TO* FROM ## _ ## as ## TO(FROM* f) { return (TO*) f; }
-
 // #################################
 // # Core Types and common methods
 
@@ -132,6 +128,11 @@ Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
 
+
+// Perform 'to = from'. Return the number of bytes moved.
+// This will always move the most bytes it can (attempting to fill 'to').
+U2   Slc_move(Slc to, Slc from);
+
 #define _ntLit(STR)        .dat = STR, .len = sizeof(STR) - 1
 #define Slc_ntLit(STR)     ((Slc){ _ntLit(STR) })
 #define Buf_ntLit(STR)     ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
@@ -140,6 +141,13 @@ I4   Slc_cmp(Slc a, Slc b);
     .dat = (U1[]){__VA_ARGS__},        \
     .len = sizeof((U1[]){__VA_ARGS__}) \
   }
+
+// Example:
+//   Buf_var(myBuf, 20); Buf_extend(&myBuf, someData);
+#define Buf_var(NAME, CAP) \
+  U1 LINED(_bufDat)[CAP]; Buf NAME = (Buf){.dat = LINED(_bufDat), .cap = CAP}
+#define PlcBuf_var(NAME, CAP) \
+  U1 LINED(_bufDat)[CAP]; PlcBuf NAME = (PlcBuf){.dat = LINED(_bufDat), .cap = CAP}
 
 // Use this with printf using the '%.*s' format, like so:
 //
@@ -152,13 +160,18 @@ I4   Slc_cmp(Slc a, Slc b);
 // # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
 // Buffers are a data pointer, a length (used data) and a capacity
 // PlcBuf has an additional field "plc" to keep place while processing a buffer.
-Slc* Buf_asSlc(Buf*);
-Slc* PlcBuf_asSlc(PlcBuf*);
-Buf* PlcBuf_asBuf(PlcBuf*);
+static inline Slc* Buf_asSlc(Buf* b)       { return (Slc*) b; }
+static inline Slc* PlcBuf_asSlc(PlcBuf* p) { return (Slc*) p; }
+static inline Buf* PlcBuf_asBuf(PlcBuf* p) { return (Buf*) p; }
+
+static inline Slc PlcBuf_plcAsSlc(PlcBuf* p) {
+  return (Slc) {.dat = p->dat + p->plc, .len = p->len - p->plc};
+}
 
 // Attempt to extend Buf. Return true if there is not enough space.
-bool Buf_extend(Buf* b, Slc s);
-bool Buf_extendNt(Buf* b, U1* s);
+void Buf_extend(Buf* b, Slc s);
+void Buf_extendNt(Buf* b, U1* s);
+static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 
 // #################################
 // # Stk: efficient first-in last-out buffer.
@@ -179,10 +192,12 @@ void Stk_add(Stk* stk, Slot value); // add a value to the stack
 // # Ring: a lock-free ring buffer.
 // Data is written to the tail and read from the head.
 #define Ring_init(dat, datLen)   (Ring){.dat = dat, ._cap = datLen}
+#define Ring_var(NAME, CAP)     \
+  U1 LINED(_ringDat)[CAP + 1]; Ring NAME = Ring_init(LINED(_ring), CAP + 1)
 #define Ring_drop(RING, ARENA)   Xr(ARENA, free, (RING)->dat, (RING)->_cap, 1)
 
-#define Ring_isEmpty(R)     ((R)->tail     == (R)->head)
-#define Ring_isFull(R)      ((R)->tail + 1 == (R)->head)
+#define Ring_isEmpty(R)     ((R)->head ==  (R)->tail)
+#define Ring_isFull(R)      ((R)->head == ((R)->tail + 1) % (R)->_cap)
 
 U2   Ring_len(Ring* r);
 
@@ -209,15 +224,18 @@ void   Ring_extend(Ring* r, Slc s);
 //    twice.
 // 2. Record how much was used with incTail.
 Slc  Ring_avail(Ring* r);
-void Ring_incTail(Ring* r, U2 inc);
-
+static inline void Ring_incTail(Ring* r, U2 inc) {
+  r->tail = (r->tail + inc) % r->_cap;
+}
 
 // This API is for:
 // 1. Get the first "chunk" of data and use some amount of it.
 // 2. incHead by the amount used.
 Slc Ring_first(Ring* r);
 Slc Ring_second(Ring* r);
-void Ring_incHead(Ring* r, U2 inc);
+static inline void Ring_incHead(Ring* r, U2 inc) {
+  r->head = (r->head + inc) % r->_cap;
+}
 
 I4  Ring_cmpSlc(Ring* r, Slc s);
 
@@ -428,8 +446,21 @@ typedef struct {
 typedef struct { const MArena* m; void* d; } Arena;
 
 // Methods that depend on arena
-Buf    Buf_new(Arena arena, U2 cap); // Note: check that buf.dat != NULL
-PlcBuf PlcBuf_new(Arena arena, U2 cap);
+static inline Buf Buf_new(Arena a, U2 cap) { // Note: check that buf.dat != NULL
+  return (Buf) { .dat = Xr(a,alloc, cap, 1), .cap = cap, };
+}
+
+static inline bool Buf_free(Buf* b, Arena a) {
+  return Xr(a,free, b->dat, b->cap, 1);
+}
+
+static inline PlcBuf PlcBuf_new(Arena arena, U2 cap) {
+  return (PlcBuf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap };
+}
+
+static inline bool PlcBuf_free(PlcBuf* p, Arena a) {
+  return Buf_free(PlcBuf_asBuf(p), a);
+}
 
 // #################################
 // # Resource Role
@@ -447,7 +478,7 @@ typedef struct {
 } MResource;
 
 typedef struct { const MResource* m; void* d; } Resource;
-Resource* Arena_asResource(Arena*);
+static inline Resource* Arena_asResource(Arena* a) { return (Resource*) a; }
 
 // #################################
 // # BBA: Block Bump Arena
@@ -527,40 +558,61 @@ void Civ_init();
 #define File_seek_END  3 // seek from end
 
 typedef struct {
-  Sll*      nextResource; // resource SLL
   Ring      ring;         // buffer for reading or writing data
   U2        code;         // status or error (File_*)
 } BaseFile;
 
 typedef struct {
   // Resource methods
-  void (*drop)            (void* d, Arena a);
-  Sll* (*resourceLL)      (void* d);
-
-  // Get the base file pointer.
-  BaseFile* (*asBase) (void* d);
+  void      (*drop)            (void* d, Arena a);
+  Sll*      (*resourceLL)      (void* d);
 
   // Close a file
-  void (*close) (void* d);
+  void      (*close) (void* d);
 
   // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
-  void (*open)  (void* d, Slc path, Slot options);
+  void      (*open)  (void* d, Slc path, Slot options);
 
   // Stop async operations (may be noop)
-  void (*stop)  (void* d);
+  void      (*stop)  (void* d);
 
   // Seek in the file whence=File_seek_(SET|CUR|END)
-  void (*seek)  (void* d, ISlot offset, U1 whence);
+  void      (*seek)  (void* d, ISlot offset, U1 whence);
 
   // Read from a file into d buffer.
-  void (*read)  (void* d);
+  void      (*read)  (void* d);
+
+  // Get the base file pointer. This is between read and write so that File can
+  // be converted to those Roles at zero cost.
+  BaseFile* (*asBase) (void* d);
 
   // Write to a file from d buffer.
-  void (*write)(void* d);
+  void      (*write)(void* d);
 } MFile;
 
 typedef struct { const MFile* m; void* d; } File;  // Role
-Resource* File_asResource(File*);
+
+typedef struct {
+  void          (*read)   (void* d);
+  BaseFile*     (*asBase) (void* d);
+} MReader;
+typedef struct { const MReader* m; void* d; } Reader;
+static inline Reader File_asReader(File f) {
+  return (Reader) { .m = (MReader*) &f.m->read, .d = f.d };
+}
+
+typedef struct {
+  BaseFile* (*asBase) (void* d);
+  void      (*write)  (void* d);
+} MWriter;
+typedef struct { const MWriter* m; void* d; } Writer;
+static inline Writer File_asWriter(File f) {
+  return (Writer) { .m = (MWriter*) &f.m->asBase, .d = f.d };
+}
+
+static inline Resource* File_asResource(File* f) {
+  return (Resource*) f;
+}
 
 #define File_CLOSED   0x00
 
@@ -576,3 +628,31 @@ Resource* File_asResource(File*);
 #define File_ERROR    0xE0
 #define File_EIO      0xE2
 #endif // __CIV_H
+
+// #################################
+// # BufFile
+// A file backed by a buffer.
+
+typedef struct {
+  Sll*      nextResource; // resource SLL
+  Ring      ring;         // buffer for reading or writing data
+  U2        code;         // status or error (File_*)
+  PlcBuf    b;
+} BufFile;
+
+#define BufFile_var(NAME, ringCap, plcBuf)              \
+  U1 LINED(_ringDat)[ringCap + 1];                      \
+  BufFile NAME = (BufFile) {                            \
+    .ring = Ring_init(LINED(_ringDat), ringCap + 1),    \
+    .buf = plcBuf,                                      \
+  }
+
+void File_panic(void* d); // used to panic for some file methods
+void File_noop(void* d);  // used as noop for some file methods
+
+DECLARE_METHOD(void      , BufFile,drop, Arena a);
+DECLARE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence);
+DECLARE_METHOD(void      , BufFile,read);
+DECLARE_METHOD(BaseFile* , BufFile,asBase);
+DECLARE_METHOD(void      , BufFile,write);
+

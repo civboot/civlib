@@ -72,7 +72,7 @@ DEFINE_METHOD(void, UFile,drop, Arena a) {
 }
 
 DEFINE_METHOD(Sll*, UFile,resourceLL) {
-  return (Sll*)this;
+  return (Sll*)&this->nextResource;
 }
 
 DEFINE_METHOD(BaseFile*, UFile,asBase) { return (BaseFile*) this; }
@@ -113,11 +113,11 @@ DEFINE_METHOD(void, UFile,read) {
   Slc avail = Ring_avail(r);
   if(avail.len) {
     len = read(this->fid, avail.dat, avail.len);
-    len = UFile_handleErr(this, len);  assert(len >= 0);
+    len = UFile_handleErr(this, len);
     Ring_incTail(r, len);
   }
-  if(Ring_len(r) == Ring_cap(r)) this->code = File_DONE;
-  else if (0 == len)              this->code = File_EOF;
+  if(Ring_isFull(r)) { this->code = File_DONE; }
+  else if (0 == len) { this->code = File_EOF;  }
 }
 
 DEFINE_METHOD(void, UFile,write) {
@@ -125,12 +125,11 @@ DEFINE_METHOD(void, UFile,write) {
   this->code = File_WRITING;
   Ring* r = &this->ring;
   Slc first = Ring_first(r);
-  int len;
   this->code = File_WRITING;
-  len = write(this->fid, first.dat, first.len);
-  len = UFile_handleErr(this, len);  assert(len >= 0);
-  if(len == Ring_len(r)) this->code = File_DONE;
+  int len = write(this->fid, first.dat, first.len);
+  len     = UFile_handleErr(this, len);
   Ring_incHead(r, len);
+  if(Ring_isEmpty(r)) this->code = File_DONE;
 }
 
 // Read until the buffer is full or EOF.
@@ -151,4 +150,6 @@ DEFINE_METHODS(MFile, UFile_mFile,
   .write      = M_UFile_write,
 )
 
-File File_asRFile(UFile* d) { return (File) { .m = UFile_mFile(), .d = d }; }
+File UFile_asFile(UFile* d) {
+  return (File) { .m = UFile_mFile(), .d = d };
+}

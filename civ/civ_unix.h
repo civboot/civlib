@@ -24,9 +24,9 @@ void CivUnix_allocBlocks(Slot numBlocks);
 
 // File
 typedef struct {
-  Sll*      nextResource; // resource SLL
   Ring      ring;     // buffer for reading or writing data
   U2        code;     // status or error (File_*)
+  Sll*      nextResource; // resource SLL
   Slot      fid;      // file id or reference
 } UFile;
 
@@ -52,7 +52,6 @@ DECLARE_METHOD(void,      UFile,stop);
 DECLARE_METHOD(void,      UFile,seek, ISlot offset, U1 whence);
 DECLARE_METHOD(void,      UFile,read);
 DECLARE_METHOD(void,      UFile,write);
-
 File UFile_asFile(UFile* d);
 
 #endif // __CIV_UNIX_H
