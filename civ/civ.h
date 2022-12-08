@@ -55,6 +55,13 @@ typedef I4                   ISlot;
 typedef I8                   ISlot;
 #endif
 
+// These are "hex" types. They are used to indicate that the value is "binary
+// like" instead of "numeric like" and should be debugged as hex with padding.
+typedef U1    H1;
+typedef U2    H2;
+typedef U4    H4;
+typedef Slot  HS;
+
 extern const U1* emptyNt; // empty null-terminated string
 
 // ####
@@ -86,6 +93,8 @@ void defaultErrPrinter();
 
 // Get the required addition/subtraction to ptr to achieve alignment
 Slot align(Slot ptr, U2 alignment);
+
+U1 hexChar(U1 v); // Get '0'-'F' for value
 
 // Clear bits in a mask.
 #define bitClr(V, MASK)      ((V) & (~(MASK)))
@@ -242,6 +251,8 @@ static inline void Ring_incHead(Ring* r, U2 inc) {
 
 I4  Ring_cmpSlc(Ring* r, Slc s);
 
+void Ring_h1Dbg(Ring* r, H1 h); // Write a  H1 to ring
+void Ring_h4Dbg(Ring* r, H4 h); // Write an H4 to ring in form 1234_ABCD
 
 // Remove dat[:plc], shifting data[plc:len] to the left.
 //
@@ -331,6 +342,15 @@ Bst* Bst_add(Bst** root, Bst* add);
   typeof(EXPECT) __result = CODE; \
   if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
   assert((EXPECT) == __result); }
+#define TASSERT_SLC_EQ(EXPECT, SLC)       \
+  if(Slc_cmp(Slc_ntLit(EXPECT), SLC)) {   \
+    eprintf("!!! Slices not equal: \n  " EXPECT "\n  %.*s\n", Dat_fmt(SLC)); \
+    assert(false); }
+
+#define TASSERT_RING_EQ(EXPECT, RING)       \
+  if(Ring_cmpSlc(RING, Slc_ntLit(EXPECT))) {   \
+    eprintf("!!! Ring not equal: \n  " EXPECT "\n  %.*s%.*s\n", Ring_fmt1(RING), Ring_fmt2(RING)); \
+    assert(false); }
 #define TASSERT_STK(EXPECT, STK)  TASSERT_EQ(EXPECT, Stk_pop(STK))
 
 // Macro expansion shenanigans. Note that a plain foo ## __LINE__ expands to the
@@ -634,6 +654,9 @@ void File_panicOpen(void* d, Slc, Slot); // unsuported open
 void File_panic(void* d); // used to panic for unsported method
 void File_noop(void* d);  // used as noop for some file methods
 
+// #################################
+// # Dbg: debug methods utilizing Writer
+void H1_err(Writer w, H1 h);
 
 // #################################
 // # BufFile

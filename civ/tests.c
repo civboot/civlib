@@ -35,6 +35,8 @@ TEST(basic)
 
   EXPECT_ERR(SET_ERR(Slc_ntLit("expected 1")));
   EXPECT_ERR(SET_ERR(Slc_ntLit("expected 2")));
+
+  TASSERT_EQ('0', hexChar(0));
 END_TEST
 
 TEST(slc)
@@ -113,7 +115,7 @@ TEST(ring)
   Ring_extend(&r, Slc_ntLit("ABCD"));
   TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("bcdeABCD"), Ring_1st(&r)));
+  TASSERT_SLC_EQ("bcdeABCD", Ring_1st(&r));
   TASSERT_EQ(0, Ring_2nd(&r).len);
   TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("bcdeABCD")));
   avail = Ring_avail(&r);
@@ -156,6 +158,11 @@ TEST(ring)
   // Test an already full Ring
   r.head = 0; r.tail = r._cap - 1;
   TASSERT_EQ(true, Ring_isFull(&r));
+
+  Ring_clear(&r);
+  Ring_h1Dbg(&r, 0xA8);
+  // TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("A8")));
+  TASSERT_RING_EQ("A8", &r);
 END_TEST
 
 TEST(sll)
