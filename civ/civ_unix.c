@@ -4,16 +4,6 @@
 
 /*extern*/ CivUnix civUnix          = (CivUnix) {};
 
-void CivUnix_init(Slot numBlocks) {
-  CivUnix_allocBlocks(numBlocks);
-  civ.fb->err.len = 0;
-}
-
-
-void CivUnix_drop() {
-  for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
-}
-
 void CivUnix_allocBlocks(Slot numBlocks) {
   void* mem = malloc(numBlocks * (BLOCK_SIZE + sizeof(BANode) + sizeof(Dll)));
   Block*  blocks = (Block*)mem;
@@ -24,6 +14,15 @@ void CivUnix_allocBlocks(Slot numBlocks) {
   Dll* mallocDll = (Dll*)(nodes + numBlocks);
   mallocDll->dat = mem;
   DllRoot_add(&civUnix.mallocs, mallocDll);
+}
+
+void CivUnix_init(Slot numBlocks) {
+  CivUnix_allocBlocks(numBlocks);
+}
+
+
+void CivUnix_drop() {
+  for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
 }
 
 // #################################

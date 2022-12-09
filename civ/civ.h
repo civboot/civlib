@@ -94,8 +94,6 @@ void defaultErrPrinter();
 // Get the required addition/subtraction to ptr to achieve alignment
 Slot align(Slot ptr, U2 alignment);
 
-U1 hexChar(U1 v); // Get '0'-'F' for value
-
 // Clear bits in a mask.
 #define bitClr(V, MASK)      ((V) & (~(MASK)))
 #define bitSet(V, SET, MASK) (bitClr(V, MASK) | (SET))
@@ -323,7 +321,9 @@ Bst* Bst_add(Bst** root, Bst* add);
 #define TEST(NAME) \
   void test_ ## NAME () {                  \
     jmp_buf localErrJmp;                   \
-    Civ_init();                            \
+    Fiber fb;                              \
+    Fiber_init(&fb, &localErrJmp);         \
+    Civ_init(&fb);                         \
     civ.fb->errJmp = &localErrJmp;         \
     eprintf("## Testing " #NAME "...\n");  \
     if(setjmp(localErrJmp)) {              \
@@ -338,10 +338,12 @@ Bst* Bst_add(Bst** root, Bst* add);
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
+
 #define TASSERT_EQ(EXPECT, CODE) if(1) { \
   typeof(EXPECT) __result = CODE; \
   if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
   assert((EXPECT) == __result); }
+
 #define TASSERT_SLC_EQ(EXPECT, SLC)       \
   if(Slc_cmp(Slc_ntLit(EXPECT), SLC)) {   \
     eprintf("!!! Slices not equal: \n  " EXPECT "\n  %.*s\n", Dat_fmt(SLC)); \
@@ -351,6 +353,7 @@ Bst* Bst_add(Bst** root, Bst* add);
   if(Ring_cmpSlc(RING, Slc_ntLit(EXPECT))) {   \
     eprintf("!!! Ring not equal: \n  " EXPECT "\n  %.*s%.*s\n", Ring_fmt1(RING), Ring_fmt2(RING)); \
     assert(false); }
+
 #define TASSERT_STK(EXPECT, STK)  TASSERT_EQ(EXPECT, Stk_pop(STK))
 
 // Macro expansion shenanigans. Note that a plain foo ## __LINE__ expands to the
@@ -544,10 +547,10 @@ MArena* mBBAGet();
 typedef struct _Fiber {
   struct _Fiber* next;
   struct _Fiber* prev;
-  jmp_buf*   errJmp;
-  Arena*     arena;     // Global default arena
-  Slc err;
+  void* variant;
   U2 state;
+  jmp_buf*   errJmp;
+  Slc err;
 } Fiber;
 
 typedef struct {
@@ -555,13 +558,18 @@ typedef struct {
   Fiber*     fb;    // currently executing fiber
 
   // Misc (normally not set/read)
-  Fiber rootFiber;
   void (*errPrinter)();
 } Civ;
 
 extern Civ civ;
 
-void Civ_init();
+void Civ_init(Fiber* fb);
+
+static inline void Fiber_init(Fiber* fb, jmp_buf* errJmp) {
+  *fb = (Fiber) {
+    .errJmp = errJmp,
+  };
+}
 
 // #################################
 // # File

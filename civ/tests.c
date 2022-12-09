@@ -35,8 +35,6 @@ TEST(basic)
 
   EXPECT_ERR(SET_ERR(Slc_ntLit("expected 1")));
   EXPECT_ERR(SET_ERR(Slc_ntLit("expected 2")));
-
-  TASSERT_EQ('0', hexChar(0));
 END_TEST
 
 TEST(slc)
@@ -158,11 +156,6 @@ TEST(ring)
   // Test an already full Ring
   r.head = 0; r.tail = r._cap - 1;
   TASSERT_EQ(true, Ring_isFull(&r));
-
-  Ring_clear(&r);
-  Ring_h1Dbg(&r, 0xA8);
-  // TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("A8")));
-  TASSERT_RING_EQ("A8", &r);
 END_TEST
 
 TEST(sll)

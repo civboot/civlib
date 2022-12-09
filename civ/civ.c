@@ -8,9 +8,8 @@
 /*extern*/ U2 civErr        = 0;
 /*extern*/ Civ civ          = (Civ) {0};
 
-void Civ_init() {
-  civ = (Civ) {0};
-  civ.fb = &civ.rootFiber;
+void Civ_init(Fiber* fb) {
+  civ = (Civ) {.fb = fb};
 }
 
 // ####
@@ -26,12 +25,6 @@ void defaultErrPrinter() {
 Slot align(Slot ptr, U2 alignment) {
   U2 need = alignment - (ptr % alignment);
   return (need == alignment) ? ptr : (ptr + need);
-}
-
-U1 hexChar(U1 v) {
-  if(v < 10) return '0' + v;
-  if(v < 16) return ('A' - 10) + v;
-  SET_ERR(Slc_ntLit("hex char >= 16"));
 }
 
 // ##
@@ -195,19 +188,6 @@ I4 Ring_cmpSlc(Ring* r, Slc s) {
   I4 cmp = Slc_cmp(first, (Slc){s.dat, first.len});
   if(cmp) return cmp;
   return Slc_cmp(Ring_2nd(r), (Slc){s.dat + first.len, s.len - first.len});
-}
-
-void Ring_h1Dbg(Ring* r, H1 h) {
-  Ring_push(r, hexChar(h >> 4));
-  Ring_push(r, hexChar(h &  0xF));
-}
-
-void Ring_h4Dbg(Ring* r, H4 h) {
-  Ring_h1Dbg(r,          h >> 24);
-  Ring_h1Dbg(r, 0xFF && (h >> 16));
-  Ring_h1Dbg(r, '_');
-  Ring_h1Dbg(r, 0xFF && (h >> 8));
-  Ring_h1Dbg(r, 0xFF &&  h     );
 }
 
 // ##
@@ -464,25 +444,6 @@ void writeAll(Writer w, Slc s) {
     s = (Slc){s.dat + moved, s.len - moved};
     Xr(w, write);
   }
-}
-
-// #################################
-// # Dbg: debug methods utilizing Writer
-
-void H1_dbg(Writer w, H1 h) {
-  Ring* r = &Xr(w, asBase)->ring;
-  while(Ring_remain(r) < 2) Xr(w,write);
-  Ring_h1Dbg(r, h);
-}
-
-void H4_dbg(Writer w, H4 h) {
-  Ring* r = &Xr(w, asBase)->ring;
-  while(Ring_remain(r) < 9) Xr(w,write);
-  Ring_h1Dbg(r,          h >> 24);
-  Ring_h1Dbg(r, 0xFF && (h >> 16));
-  Ring_h1Dbg(r, '_');
-  Ring_h1Dbg(r, 0xFF && (h >> 8));
-  Ring_h1Dbg(r, 0xFF &&  h     );
 }
 
 // #################################
