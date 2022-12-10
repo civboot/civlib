@@ -179,6 +179,8 @@ static inline Slc PlcBuf_plcAsSlc(PlcBuf* p) {
 }
 
 static inline void Buf_clear(Buf* b) { b->len = 0; }
+static inline void _Buf_add(Buf* b, U1 v) { b->dat[b->len++] = v; }
+static inline bool Buf_isFull(Buf* b) { return b->len == b->cap; }
 
 // Attempt to extend Buf.
 void Buf_add(Buf* b, U1 v);
@@ -222,6 +224,7 @@ void Stk_add(Stk* stk, Slot value); // add a value to the stack
 #define Ring_isFull(R)      ((R)->head == ((R)->tail + 1) % (R)->_cap)
 
 U2   Ring_len(Ring* r);
+U1   Ring_get(Ring* r, U2 i);
 
 // The capacity of the Ring is one less than the buffer capacity.
 #define Ring_cap(RING)    ((RING)->_cap - 1)
@@ -662,6 +665,9 @@ static inline Resource* File_asResource(File* f) {
 void File_extend(File f, Slc s);
 void Writer_extend(Writer w, Slc s);
 
+// Get the pointer to index, reading if necessary.
+U1* Reader_get(Reader f, U2 i);
+
 #define File_CLOSED   0x00
 
 #define File_SEEKING  0x10
@@ -694,11 +700,13 @@ typedef struct {
   PlcBuf    b;
 } BufFile;
 
-#define BufFile_var(NAME, ringCap, plcBuf)              \
+// Typical use:
+// BufFile_var(f, 16, "An example string."");
+#define BufFile_var(NAME, ringCap, STR)              \
   U1 LINED(_ringDat)[ringCap + 1];                      \
   BufFile NAME = (BufFile) {                            \
     .ring = Ring_init(LINED(_ringDat), ringCap + 1),    \
-    .b = plcBuf, .code = File_DONE,                     \
+    .b = PlcBuf_ntLit(STR), .code = File_DONE,                     \
   }
 
 DECLARE_METHOD(void      , BufFile,drop, Arena a);

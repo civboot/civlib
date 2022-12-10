@@ -115,10 +115,12 @@ TEST(ring)
   TASSERT_EQ('a', dat[0]);
   avail = Ring_avail(&r);
   TASSERT_EQ(8, avail.len); assert(dat + 1 == avail.dat);
+  TASSERT_EQ('a', Ring_get(&r, 0));
 
   Ring_extend(&r, Slc_ntLit("bcde"));
   TASSERT_EQ(0, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(0, memcmp(dat, "abcde", 5));
+  TASSERT_EQ('e', Ring_get(&r, 4));
 
   assert(dat == Ring_next(&r));
   TASSERT_EQ(1, r.head); TASSERT_EQ(5, r.tail);
@@ -151,6 +153,7 @@ TEST(ring)
   TASSERT_EQ(9, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
   TASSERT_EQ(0, memcmp(dat, "fgh", 3));
+  TASSERT_EQ('f', Ring_get(&r, 6)); TASSERT_EQ('g', Ring_get(&r, 7));
   avail = Ring_avail(&r);
   TASSERT_EQ(0, avail.len); assert(dat + 3 == avail.dat);
 
@@ -294,7 +297,7 @@ TEST_UNIX(bba, 5)
 END_TEST_UNIX
 
 TEST(bufFile)
-  BufFile_var(f, 16, PlcBuf_ntLit("Civboot is the foundation of a simpler technology."));
+  BufFile_var(f, 16, "Civboot is the foundation of a simpler technology.");
   Ring* r = &f.ring;
 
   TASSERT_EQ(50, f.b.len);

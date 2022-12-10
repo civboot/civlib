@@ -78,13 +78,13 @@ U2 Slc_move(Slc to, Slc from) {
 // # Buf + PlcBuf
 void Buf_add(Buf* b, U1 v) {
   ASSERT(b->len < b->cap, "Buf add OOB");
-  b->dat[b->len++] = v;
+  _Buf_add(b, v);
 }
 
 void Buf_addBE2(Buf* b, U2 v) {
   ASSERT(b->len + 1 < b->cap, "Buf addBE2 OOB");
-  b->dat[b->len++] = v >> 8;
-  b->dat[b->len++] = v;
+  _Buf_add(b, v >> 8);
+  _Buf_add(b, v);
 }
 
 void Buf_addBE4(Buf* b, U4 v) {
@@ -134,6 +134,11 @@ void Stk_add(Stk* stk, Slot value) {
 U2 Ring_len(Ring* r) {
   if(r->tail >= r->head) return r->tail - r->head;
   else                   return r->tail + r->_cap - r->head;
+}
+
+U1 Ring_get(Ring* r, U2 i) {
+  ASSERT(i < Ring_len(r), "Ring_get OOB");
+  return r->dat[(r->head + i) % r->_cap];
 }
 
 static inline void Ring_wrapHead(Ring* r) {
@@ -479,6 +484,18 @@ void writeAll(Writer w, Slc s) {
 
 void File_extend(File f, Slc s)      FEXTEND
 void Writter_extend(Writer f, Slc s) FEXTEND
+
+U1* Reader_get(Reader f, U2 i) {
+  BaseFile* b = Xr(f, asBase);
+  Ring* r = &b->ring;
+  if(i < Ring_len(r)) return &r->dat[(r->head + i) % r->_cap];
+  ASSERT(i < Ring_cap(r), "index larger than Ring");
+  do {
+    Xr(f, read);
+    if(i < Ring_len(r)) return &r->dat[(r->head + i) % r->_cap];
+  } while(b->code <= File_DONE);
+  return NULL;
+}
 
 // #################################
 // # BufFile
