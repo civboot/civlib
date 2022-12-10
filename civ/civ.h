@@ -94,6 +94,9 @@ void defaultErrPrinter();
 // Get the required addition/subtraction to ptr to achieve alignment
 Slot align(Slot ptr, U2 alignment);
 
+// Checks the mask
+#define bitHas(V, MASK)      ( (MASK) == ((V) & (MASK)) )
+
 // Clear bits in a mask.
 #define bitClr(V, MASK)      ((V) & (~(MASK)))
 #define bitSet(V, SET, MASK) (bitClr(V, MASK) | (SET))
@@ -175,9 +178,15 @@ static inline Slc PlcBuf_plcAsSlc(PlcBuf* p) {
   return (Slc) {.dat = p->dat + p->plc, .len = p->len - p->plc};
 }
 
-// Attempt to extend Buf. Return true if there is not enough space.
+static inline void Buf_clear(Buf* b) { b->len = 0; }
+
+// Attempt to extend Buf.
+void Buf_add(Buf* b, U1 v);
+void Buf_addBE2(Buf* b, U2 v);
+void Buf_addBE4(Buf* b, U4 v);
 void Buf_extend(Buf* b, Slc s);
 void Buf_extendNt(Buf* b, U1* s);
+
 static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 
 // #################################
@@ -187,13 +196,19 @@ static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 // Initialize the stack. The cap must be the total number of Slots
 // (NOT the size in bytes)
 #define Stk_init(DAT, CAP) (Stk) (Stk) {.dat = DAT, .sp = CAP, .cap = CAP}
-#define Stk_clear(STK)     ((STK).sp = (STK).cap)
+#define Stk_clear(STK)     ((STK)->sp = (STK)->cap)
+
 
 // Get the number of slots in use.
-#define Stk_len(STK)             ((STK).cap - (STK).sp)
+#define Stk_len(STK)             ((STK)->cap - (STK)->sp)
 
 Slot Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
 void Stk_add(Stk* stk, Slot value); // add a value to the stack
+                                    //
+#define Stk_add2(STK, A, B)     Stk_add(STK, A);     Stk_add(STK, B)
+#define Stk_add3(STK, A, B, C)  Stk_add2(STK, A, B); Stk_add(STK, C)
+#define Stk_pop2(STK, A, B)     B = Stk_pop(STK);    A = Stk_pop(STK)
+#define Stk_pop3(STK, A, B, C)  Stk_pop2(STK, B, C); A = Stk_pop(STK)
 
 // #################################
 // # Ring: a lock-free ring buffer.
@@ -642,6 +657,10 @@ static inline Writer File_asWriter(File f) {
 static inline Resource* File_asResource(File* f) {
   return (Resource*) f;
 }
+
+// Extend data to file's ring, writing if necessary.
+void File_extend(File f, Slc s);
+void Writer_extend(Writer w, Slc s);
 
 #define File_CLOSED   0x00
 

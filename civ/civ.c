@@ -76,6 +76,27 @@ U2 Slc_move(Slc to, Slc from) {
 
 // ##
 // # Buf + PlcBuf
+void Buf_add(Buf* b, U1 v) {
+  ASSERT(b->len < b->cap, "Buf add OOB");
+  b->dat[b->len++] = v;
+}
+
+void Buf_addBE2(Buf* b, U2 v) {
+  ASSERT(b->len + 1 < b->cap, "Buf addBE2 OOB");
+  b->dat[b->len++] = v >> 8;
+  b->dat[b->len++] = v;
+}
+
+void Buf_addBE4(Buf* b, U4 v) {
+  U2 len = b->len;
+  ASSERT(len + 3 < b->cap, "Buf addBE4 OOB");
+  b->dat[len]   = v >> 24;
+  b->dat[len+1] = v >> 16;
+  b->dat[len+2] = v >> 8;
+  b->dat[len+3] = v;
+  b->len += 4;
+}
+
 void Buf_extend(Buf* b, Slc s) {
   ASSERT(b->cap >= b->len + s.len, "Buf extend OOB");
   memcpy(b->dat + b->len, s.dat, s.len);
@@ -85,6 +106,7 @@ void Buf_extend(Buf* b, Slc s) {
 void Buf_extendNt(Buf* b, U1* s) {
   return Buf_extend(b, Slc_frNt(s));
 }
+
 
 void PlcBuf_shift(PlcBuf* buf) {
   I4 len = (I4)buf->len - buf->plc;
@@ -444,6 +466,19 @@ void writeAll(Writer w, Slc s) {
     Xr(w, write);
   }
 }
+
+#define FEXTEND { \
+  BaseFile* b = Xr(f, asBase);            \
+  while(s.len) {                          \
+    U2 moved = Ring_move(&b->ring, s);    \
+    s = (Slc){s.dat + moved, s.len - moved}; \
+    if(s.len) Xr(f, write); \
+  } \
+}
+
+
+void File_extend(File f, Slc s)      FEXTEND
+void Writter_extend(Writer f, Slc s) FEXTEND
 
 // #################################
 // # BufFile

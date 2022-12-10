@@ -58,6 +58,14 @@ TEST(buf)
   TASSERT_EQ(0, b.len); TASSERT_EQ(10, b.cap);
   Buf_extend(&b, Slc_ntLit("hello"));
   TASSERT_EQ(5, b.len);
+
+  Buf_clear(&b); Buf_addBE2(&b, 0x1234);
+  TASSERT_EQ(2, b.len);
+  TASSERT_SLC_EQ("\x12\x34", *Buf_asSlc(&b));
+
+  Buf_clear(&b); Buf_addBE4(&b, 0x1234ABCD);
+  TASSERT_EQ(4, b.len);
+  TASSERT_SLC_EQ("\x12\x34\xAB\xCD", *Buf_asSlc(&b));
 END_TEST
 
 TEST(plcBuf)
@@ -67,6 +75,7 @@ TEST(plcBuf)
   TASSERT_EQ(0, pb.plc); TASSERT_EQ(11, pb.cap);
   pb.plc = 4; PlcBuf_shift(&pb);
   TASSERT_EQ(0, Slc_cmp(*PlcBuf_asSlc(&pb), Slc_ntLit("bar baz")));
+
 END_TEST
 
 TEST(stk)
@@ -77,9 +86,14 @@ TEST(stk)
   Stk_add(&s, 3);
   TASSERT_EQ(3, dat[2]); TASSERT_EQ(2, s.sp);
   TASSERT_EQ(3, Stk_pop(&s));
-  Stk_add(&s, 1);      Stk_add(&s, 2);     Stk_add(&s, 42);
+  Stk_add3(&s, 1, 2, 42);
   EXPECT_ERR(Stk_add(&s, 0xFF));
   TASSERT_STK(42, &s); TASSERT_STK(2, &s); TASSERT_STK(1, &s);
+  Slot a = 0, b = 0, c = 0;
+  Stk_add3(&s, 4, 5, 99); Stk_pop3(&s, a, b, c);
+  TASSERT_EQ(4, a); TASSERT_EQ(5, b); TASSERT_EQ(99, c);
+
+
 END_TEST
 
 TEST(ring)
