@@ -355,16 +355,16 @@ DEFINE_METHOD(void, BBA,drop) {
 
 // Get spare bytes
 DEFINE_METHOD(Slot, BBA,spare) {
-  BlockInfo* info = &BBA_info(this);
-  return info->top - info->bot;
+  Block* b = BBA_block(this);
+  return b->top - b->bot;
 }
 
 static Block* BBA_allocBlock(BBA* bba) {
   BANode* node = BA_alloc(bba->ba);
   if(not node) return NULL;
-  BlockInfo* info = &(node->block->info);
-  info->bot = 0;
-  info->top = BLOCK_AVAIL;
+  Block* b = node->block;
+  b->bot = 0;
+  b->top = BLOCK_AVAIL;
   DllRoot_add(BBA_asDllRoot(bba), BANode_asDll(node));
   return node->block;
 }
@@ -373,10 +373,10 @@ static Block* BBA_allocBlock(BBA* bba) {
 static Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
   if(not bba->dat)
     return BBA_allocBlock(bba);
-  Block* block = BBA_block(bba);
-  if(block->info.bot + grow > block->info.top)
+  Block* b = BBA_block(bba);
+  if(b->bot + grow > b->top)
       return BBA_allocBlock(bba);
-  return block;
+  return b;
 }
 
 
@@ -384,19 +384,19 @@ DEFINE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment) {
   ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
   if(1 == alignment) {
     // Grow up
-    Block* block = _allocBlockIfRequired(this, sz);
-    if(not block) return NULL;
-    U1* out = (U1*)block + block->info.bot;
-    block->info.bot += sz;
+    Block* b = _allocBlockIfRequired(this, sz);
+    if(not b) return NULL;
+    U1* out = (U1*)b + b->bot;
+    b->bot += sz;
     return out;
   }
   // Else grow down (aligned)
   sz = align(sz, FIX_ALIGN(alignment));
-  Block* block = _allocBlockIfRequired(this, sz);
-  if(not block) return NULL;
-  U2* top = &(block->info.top);
+  Block* b = _allocBlockIfRequired(this, sz);
+  if(not b) return NULL;
+  U2* top = &(b->top);
   *top -= sz;
-  return (U1*)block + (*top);
+  return (U1*)b + (*top);
 }
 
 Slc BBA_free_empty = Slc_ntLit("Free empty BBA");
@@ -405,22 +405,21 @@ Slc BBA_free_above = Slc_ntLit("Data above block");
 
 DEFINE_METHOD(Slc*, BBA,free, void* data, Slot sz, U2 alignment) {
   if(not this->dat) return &BBA_free_empty;
-  Block* block = BBA_block(this);
-  BlockInfo* info = &block->info;
-  if((U1*)block > (U1*)data) return &BBA_free_below;
-  if((U1*)data + sz > (U1*)block + BLOCK_AVAIL) return &BBA_free_above;
+  Block* b = BBA_block(this);
+  if((U1*)b > (U1*)data) return &BBA_free_below;
+  if((U1*)data + sz > (U1*)b + BLOCK_AVAIL) return &BBA_free_above;
 
-  U2 plc = (U2)((U1*)data - (U1*)block);
+  U2 plc = (U2)((U1*)data - (U1*)b);
   if(1 == alignment) {
-    ASSERT(plc == info->bot - sz, "unordered free: sz");
-    info->bot = plc;
+    ASSERT(plc == b->bot - sz, "unordered free: sz");
+    b->bot = plc;
   } else {
     sz = align(sz, FIX_ALIGN(alignment));
-    ASSERT(plc <= info->top, "unordered free: sz");
-    info->top = plc + sz;
+    ASSERT(plc <= b->top, "unordered free: sz");
+    b->top = plc + sz;
   }
 
-  if(info->top - info->bot == BLOCK_AVAIL) {
+  if(b->top - b->bot == BLOCK_AVAIL) {
     BA_free(this->ba, (BANode*)DllRoot_pop(BBA_asDllRoot(this)));
   }
   return NULL;

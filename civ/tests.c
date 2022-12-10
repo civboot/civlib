@@ -257,11 +257,11 @@ TEST_UNIX(bba, 5)
   U1* bytes = BBA_alloc(&bba, 5, ALIGN1);
   bytes[0] = 'h'; bytes[1] = 'i';
   Block* block = BBA_block(&bba);
-  TASSERT_EQ(5, block->info.bot);
+  TASSERT_EQ(5, block->bot);
   TASSERT_EQ((U1*)block, bytes);
 
   U1* bytes2 = BBA_alloc(&bba, 12, ALIGN1);
-  TASSERT_EQ(17, block->info.bot);
+  TASSERT_EQ(17, block->bot);
   TASSERT_EQ(bytes + 5, bytes2);
   BBA_free(&bba, bytes2, 12, 1);
 
@@ -269,10 +269,10 @@ TEST_UNIX(bba, 5)
   TASSERT_EQ((U1*)block + BLOCK_AVAIL - 4, (U1*) v1);
   *v1 = 0x4444;
 
-  TASSERT_EQ(BLOCK_AVAIL - 4, BBA_info(&bba).top);
+  TASSERT_EQ(BLOCK_AVAIL - 4, BBA_block(&bba)->top);
   Arena a = BBA_asArena(&bba); // testing out arenas
   Xr(a,free, v1, 4, ALIGN_SLOT);
-  TASSERT_EQ(BLOCK_AVAIL, BBA_info(&bba).top);
+  TASSERT_EQ(BLOCK_AVAIL, BBA_block(&bba)->top);
 
   BBA_drop(&bba);
 

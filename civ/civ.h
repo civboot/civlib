@@ -435,11 +435,10 @@ Bst* Bst_add(Bst** root, Bst* add);
 #define BLOCK_AVAIL (BLOCK_SIZE - (sizeof(U2) * 2))
 #define BLOCK_END  0xFF
 
-typedef struct { U2 bot; U2 top; } BlockInfo;
-
 typedef struct {
   U1 dat[BLOCK_AVAIL];
-  BlockInfo info;
+  U2 bot;
+  U2 top;
 } Block;
 
 typedef struct _BANode {
@@ -525,7 +524,6 @@ typedef struct { BA* ba; BANode* dat; } BBA;
 DllRoot* BBA_asDllRoot(BBA* bba);
 Arena    BBA_asArena(BBA* b);
 #define  BBA_block(BBA) ((BBA)->dat->block)
-#define  BBA_info(BBA)  (BBA_block(BBA)->info)
 
 DECLARE_METHOD(void, BBA,drop);   // BBA_drop
 DECLARE_METHOD(Slot , BBA,spare); // BBA_spare
