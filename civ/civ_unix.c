@@ -26,22 +26,6 @@ void CivUnix_drop() {
 }
 
 // #################################
-// # Core Types and common methods
-
-
-bool CStr_varAssert(U4 line, U1* STR, U1* LEN) {
-  if(1 != strlen(LEN)) {
-    eprintf("ERROR CStr_var [line=%u]: LEN must be single byte (line=%u)");
-    return false;
-  }
-  if(LEN[0] != strlen(STR)) {
-    eprintf("ERROR CStr_var [line=%u]: Use LEN = \"\\x%.2X\"\n", line, strlen(STR));
-    return false;
-  }
-  return true;
-}
-
-// #################################
 // # File
 
 // Should only be used in tests

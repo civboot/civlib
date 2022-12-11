@@ -70,7 +70,7 @@ typedef struct { U1*   dat;   U2 len;                    } Slc;
 typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
 typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
 typedef struct { Slot* dat;   U2 sp;   U2 cap;           } Stk;
-typedef struct { U1    count; U1 dat[];                  } CStr;
+typedef struct { U1    len;   U1 dat[];                  } CStr;
 typedef struct { U1*   dat;   U2 head; U2 tail; U2 _cap; } Ring;
 
 typedef struct _Sll {
@@ -137,6 +137,7 @@ static inline U4 U4_ceil(U4 a, U4 b) { return (a / b) + (a % b != 0); }
 Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
+#define Slc_eq(A, B)   (0 == Slc_cmp(A, B))
 
 
 // Perform 'to = from'. Return the number of bytes moved.
@@ -145,7 +146,7 @@ U2   Slc_move(Slc to, Slc from);
 
 #define _ntLit(STR)        .dat = STR, .len = sizeof(STR) - 1
 #define Slc_ntLit(STR)     ((Slc){ _ntLit(STR) })
-#define Buf_ntLit(STR)     ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
+#define Buf_ntLit(STR)     ((Buf)    { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define PlcBuf_ntLit(STR)  ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define Slc_lit(...)  (Slc){           \
     .dat = (U1[]){__VA_ARGS__},        \
@@ -159,12 +160,16 @@ U2   Slc_move(Slc to, Slc from);
 #define PlcBuf_var(NAME, CAP) \
   U1 LINED(_bufDat)[CAP]; PlcBuf NAME = (PlcBuf){.dat = LINED(_bufDat), .cap = CAP}
 
+Slc Slc_slc(Slc* s, U2 start, U2 end);
+Slc Buf_slc(Buf* b, U2 start, U2 end);
+
 // Use this with printf using the '%.*s' format, like so:
 //
 //   printf("Printing my slice: %.*s\n", Dat_fmt(slc));
 //
 // This is safe to use with CStr, Buf and PlcBuf.
 #define Dat_fmt(DAT)   (DAT).len, (DAT).dat
+
 
 // #################################
 // # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
@@ -205,6 +210,7 @@ static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 #define Stk_len(STK)             ((STK)->cap - (STK)->sp)
 
 Slot Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
+Slot Stk_top(Stk* stk); // Get stack top (without altering stack)
 void Stk_add(Stk* stk, Slot value); // add a value to the stack
                                     //
 #define Stk_add2(STK, A, B)     Stk_add(STK, A);     Stk_add(STK, B)
@@ -277,8 +283,6 @@ void Ring_h4Dbg(Ring* r, H4 h); // Write an H4 to ring in form 1234_ABCD
 void PlcBuf_shift(PlcBuf*);
 
 // CStr
-bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
-
 // Declare a CStr global. It's your job to assert that the LEN is valid.
 #define CStr_ntLitUnchecked(NAME, LEN, STR) \
   char _CStr_ ## NAME[1 + sizeof(STR)] = LEN STR; \
@@ -290,6 +294,20 @@ bool CStr_varAssert(U4 line, U1* STR, U1* LEN);
 #define CStr_ntVar(NAME, LEN, STR)      \
   static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
+
+static inline bool CStr_varAssert(U4 line, U1* str, U1* len) {
+  if(1 != strlen(len)) {
+    eprintf("ERROR CStr_var [line=%u]: LEN must be single byte (line=%u)");
+    return false;
+  }
+  if(len[0] != strlen(str)) {
+    eprintf("ERROR CStr_var [line=%u]: Use LEN = \"\\x%.2X\"\n", line, strlen(str));
+    return false;
+  }
+  return true;
+}
+
+void CStr_init(CStr* this, Slc s);
 
 // #################################
 // # Sll: Singly Linked List
@@ -329,7 +347,22 @@ typedef struct _Bst {
   CStr* key;
 } Bst;
 
+// Find slice in Bst, starting at `*node`. Set result to `*node`
+// Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
+//
+// This can be used like this:
+//   Bst* node = NULL;
+//   I4 cmp = Bst_find(&node, Slc_ntLit("myNode"));
+//   // if   not node    : *node was null (Bst is empty)
+//   // elif cmp == 0    : *node key == "myNode"
+//   // elif cmp < 0     : *node key <  "myNode"
+//   // else cmp > 0     : *node key >  "myNode"
 I4   Bst_find(Bst** node, Slc slc);
+
+// Add a node to the tree, modifying *root if the node becomes root.
+//
+// Returns NULL if `add.key` did not exist in the tree. Else returns the
+// existing node (which is no longer in the tree).
 Bst* Bst_add(Bst** root, Bst* add);
 
 // #################################
@@ -489,6 +522,8 @@ typedef struct {
 typedef struct { const MArena* m; void* d; } Arena;
 
 // Methods that depend on arena
+CStr* CStr_new(Arena a, Slc s);
+
 static inline Buf Buf_new(Arena a, U2 cap) { // Note: check that buf.dat != NULL
   return (Buf) { .dat = Xr(a,alloc, cap, 1), .cap = cap, };
 }
@@ -504,6 +539,7 @@ static inline PlcBuf PlcBuf_new(Arena arena, U2 cap) {
 static inline bool PlcBuf_free(PlcBuf* p, Arena a) {
   return Buf_free(PlcBuf_asBuf(p), a);
 }
+
 
 // #################################
 // # Resource Role
@@ -700,14 +736,21 @@ typedef struct {
   PlcBuf    b;
 } BufFile;
 
+static inline BufFile BufFile_init(Ring r, Buf b) {
+  return (BufFile) {
+    .ring = r,
+    .code = File_DONE,
+    .b = (PlcBuf){.dat = b.dat, .len = b.len, .cap = b.cap},
+  };
+}
+
 // Typical use:
 // BufFile_var(f, 16, "An example string."");
 #define BufFile_var(NAME, ringCap, STR)              \
   U1 LINED(_ringDat)[ringCap + 1];                      \
-  BufFile NAME = (BufFile) {                            \
-    .ring = Ring_init(LINED(_ringDat), ringCap + 1),    \
-    .b = PlcBuf_ntLit(STR), .code = File_DONE,                     \
-  }
+  BufFile NAME = BufFile_init( \
+    Ring_init(LINED(_ringDat), ringCap + 1), \
+    Buf_ntLit(STR));
 
 DECLARE_METHOD(void      , BufFile,drop, Arena a);
 DECLARE_METHOD(Sll*      , BufFile,resourceLL);

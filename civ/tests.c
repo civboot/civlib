@@ -10,7 +10,7 @@ TEST(basic)
   static const char s0[1 + sizeof("hello")] = "\x05" "hello";
   assert(5 == s0[0]);
   CStr_ntVar(s1, "\x07", "goodbye");
-  assert(7 == s1->count);
+  assert(7 == s1->len);
   assert(0 == strcmp(s1->dat, "goodbye"));
 
   Slc s2 = Slc_lit(0, 1, 2, 3, 4);

@@ -50,7 +50,7 @@ void srBE(U1* p, Slot size, U4 value) { // store Big Endian
 // ##
 // # Slc
 Slc Slc_frNt(U1* s)     { return (Slc) { .dat = s,      .len = strlen(s) }; }
-Slc Slc_frCStr(CStr* c) { return (Slc) { .dat = c->dat, .len = c->count  }; }
+Slc Slc_frCStr(CStr* c) { return (Slc) { .dat = c->dat, .len = c->len    }; }
 
 I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
   U2 len = U4_min(l.len, r.len);
@@ -107,6 +107,14 @@ void Buf_extendNt(Buf* b, U1* s) {
   return Buf_extend(b, Slc_frNt(s));
 }
 
+#define _slc(TY) { \
+  ASSERT(end >= start, #TY "_slc end < start"); \
+  ASSERT(end <= d->len, #TY "_slc OOB"); \
+  return (Slc){.dat = d->dat + start, .len = end - start}; \
+}
+Slc Slc_slc(Slc* d, U2 start, U2 end) _slc(Slc)
+Slc Buf_slc(Buf* d, U2 start, U2 end) _slc(Buf)
+#undef _slc
 
 void PlcBuf_shift(PlcBuf* buf) {
   I4 len = (I4)buf->len - buf->plc;
@@ -115,12 +123,31 @@ void PlcBuf_shift(PlcBuf* buf) {
   buf->len = (U2)len; buf->plc = 0;
 }
 
+void CStr_init(CStr* this, Slc s) {
+  ASSERT(s.len <= 0xFF, "CStr max len = 255");
+  this->len = s.len;
+  memcpy(s.dat, this->dat, s.len);
+}
+
+CStr* CStr_new(Arena a, Slc s) {
+  ASSERT(s.len <= 0xFF, "CStr max len = 255");
+  CStr* c = (CStr*) Xr(a, alloc, s.len + 1, /*align*/1);
+  if(not c) return NULL;
+  CStr_init(c, s);
+  return c;
+}
+
 // #################################
 // # Stk: efficient first-in last-out buffer.
 
 Slot Stk_pop(Stk* stk) {
   ASSERT(stk->sp < stk->cap, "Stk underflow");
   return stk->dat[stk->sp ++];
+}
+
+Slot Stk_top(Stk* stk) {
+  ASSERT(stk->sp < stk->cap, "Stk_top OOB");
+  return stk->dat[stk->sp];
 }
 
 void Stk_add(Stk* stk, Slot value) {
