@@ -4,6 +4,24 @@
 
 /*extern*/ CivUnix civUnix          = (CivUnix) {};
 
+#include <execinfo.h>
+
+#define BT_SIZE   128
+void printTrace() {
+  void*    array[BT_SIZE];
+  int      size    = backtrace(array, BT_SIZE);
+  char**   strings =  backtrace_symbols(array, size);
+  assert(strings); // No debug symbols found
+  for(int i = 2; i < size; i++) printf("  %s\n", strings[i]);
+  free(strings);
+}
+
+void defaultErrPrinter() {
+  eprintf("!! Encountered error. Stack trace:\n");
+  printTrace();
+  eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat);
+}
+
 void CivUnix_allocBlocks(Slot numBlocks) {
   void* mem = malloc(numBlocks * (BLOCK_SIZE + sizeof(BANode) + sizeof(Dll)));
   Block*  blocks = (Block*)mem;
@@ -24,6 +42,7 @@ void CivUnix_init(Slot numBlocks) {
 void CivUnix_drop() {
   for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
 }
+
 
 // #################################
 // # File

@@ -223,7 +223,7 @@ void Stk_add(Stk* stk, Slot value); // add a value to the stack
 // Data is written to the tail and read from the head.
 #define Ring_init(DAT, datLen)   (Ring){.dat = DAT, ._cap = datLen}
 #define Ring_var(NAME, CAP)     \
-  U1 LINED(_ringDat)[CAP + 1]; Ring NAME = Ring_init(LINED(_ring), CAP + 1)
+  U1 LINED(_ringDat)[CAP + 1]; Ring NAME = Ring_init(LINED(_ringDat), CAP + 1)
 #define Ring_drop(RING, ARENA)   Xr(ARENA, free, (RING)->dat, (RING)->_cap, 1)
 
 #define Ring_isEmpty(R)     ((R)->head ==  (R)->tail)
@@ -375,7 +375,6 @@ Bst* Bst_add(Bst** root, Bst* add);
     Fiber fb;                              \
     Fiber_init(&fb, &localErrJmp);         \
     Civ_init(&fb);                         \
-    civ.fb->errJmp = &localErrJmp;         \
     eprintf("## Testing " #NAME "...\n");  \
     if(setjmp(localErrJmp)) {              \
       if(civ.errPrinter) civ.errPrinter(); \
@@ -386,6 +385,7 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
+  if(not (Fiber_EXPECT_ERR & civ.fb->state)) defaultErrPrinter(); \
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)

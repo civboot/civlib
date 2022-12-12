@@ -1,13 +1,13 @@
 CC=gcc
-FLAGS=-m32
+FLAGS=-m32 -g -rdynamic
 DISABLE_WARNINGS=-Wno-pointer-sign -Wno-format
 FILES=civ/*.c
-OUT=bin/a.out
+OUT=bin/tests
 
 all: test
 
 test: build
-	./bin/a.out
+	./$(OUT)
 
 build:
 	mkdir -p bin/

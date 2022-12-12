@@ -18,10 +18,6 @@ void Civ_init(Fiber* fb) {
 // Most APIs only align on 4 bytes (or are unaligned)
 #define FIX_ALIGN(A) ((A == 1) ? 1 : 4)
 
-void defaultErrPrinter() {
-  eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat);
-}
-
 Slot align(Slot ptr, U2 alignment) {
   U2 need = alignment - (ptr % alignment);
   return (need == alignment) ? ptr : (ptr + need);
