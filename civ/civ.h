@@ -114,6 +114,13 @@ Slot align(Slot ptr, U2 alignment);
 // their neighbors (who broke the big side of the egg on their head) due to the
 // difference of this custom.  Similarily, hardware architects at the dawn of
 // computing were going to war over big/little endianness.
+
+static inline U1 ftBE1(U1* p) { return *p; }
+static inline U2 ftBE2(U1* p) { return (*p<<8) + *(p + 1); }
+static inline U4 ftBE4(U1* p) {
+  return (*p << 24) + (*(p + 1)<<16) + (*(p + 2)<<8) + *(p + 3);
+}
+
 U4   ftBE(U1* p, Slot size);
 void srBE(U1* p, Slot size, U4 value);
 
@@ -169,7 +176,7 @@ Slc Buf_slc(Buf* b, U2 start, U2 end);
 //
 // This is safe to use with CStr, Buf and PlcBuf.
 #define Dat_fmt(DAT)   (DAT).len, (DAT).dat
-
+#define CStr_fmt(C)    (C)->len,  (C)->dat
 
 // #################################
 // # Buf + PlcBuf: buffers of up to 64KiB indexes (0x10,000)
@@ -284,6 +291,8 @@ void PlcBuf_shift(PlcBuf*);
 
 // CStr
 // Declare a CStr global. It's your job to assert that the LEN is valid.
+static inline Slc CStr_asSlc(CStr* c) { return (Slc) {c->dat, .len=c->len}; }
+
 #define CStr_ntLitUnchecked(NAME, LEN, STR) \
   char _CStr_ ## NAME[1 + sizeof(STR)] = LEN STR; \
   CStr* NAME = (CStr*) _CStr_ ## NAME;
@@ -307,7 +316,7 @@ static inline bool CStr_varAssert(U4 line, U1* str, U1* len) {
   return true;
 }
 
-void CStr_init(CStr* this, Slc s);
+CStr* CStr_init(CStr* this, Slc s);
 
 // #################################
 // # Sll: Singly Linked List
@@ -387,7 +396,7 @@ Bst* Bst_add(Bst** root, Bst* add);
   civ.fb->err = E; \
   if(not (Fiber_EXPECT_ERR & civ.fb->state)) defaultErrPrinter(); \
   longjmp(*civ.fb->errJmp, 1); }
-#define ASSERT(C, E)   if(!(C)) { SET_ERR(Slc_ntLit(E)); }
+#define ASSERT(C, E)   do { if(!(C)) { SET_ERR(Slc_ntLit(E)); } } while(0)
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
 
 #define TASSERT_EQ(EXPECT, CODE) if(1) { \
@@ -720,6 +729,13 @@ U1* Reader_get(Reader f, U2 i);
 void File_panicOpen(void* d, Slc, Slot); // unsuported open
 void File_panic(void* d); // used to panic for unsported method
 void File_noop(void* d);  // used as noop for some file methods
+
+#define F_EOF { BaseFile* b = Xr(f,asBase); \
+  return (File_EOF == b->code) and Ring_isEmpty(&b->ring); }
+static inline bool File_eof(File f) F_EOF
+static inline bool Reader_eof(Reader f) F_EOF
+#undef F_EOF
+
 
 // #################################
 // # Dbg: debug methods utilizing Writer

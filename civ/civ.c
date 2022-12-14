@@ -27,8 +27,8 @@ Slot align(Slot ptr, U2 alignment) {
 // # Big Endian (unaligned) Fetch/Store
 U4 ftBE(U1* p, Slot size) { // fetch Big Endian
   switch(size) {
-    case 1: return *p;                  case 2: return (*p<<8) + *(p + 1);
-    case 4: return (*p << 24) + (*(p + 1)<<16) + (*(p + 2)<<8) + *(p + 3);
+    case 1: return *p;                  case 2: return ftBE2(p);
+    case 4: return ftBE4(p);
     default: SET_ERR(Slc_ntLit("ftBE: invalid sz"));
   }
 }
@@ -119,18 +119,18 @@ void PlcBuf_shift(PlcBuf* buf) {
   buf->len = (U2)len; buf->plc = 0;
 }
 
-void CStr_init(CStr* this, Slc s) {
+CStr* CStr_init(CStr* this, Slc s) {
   ASSERT(s.len <= 0xFF, "CStr max len = 255");
   this->len = s.len;
-  memcpy(s.dat, this->dat, s.len);
+  memcpy(this->dat, s.dat, s.len);
+  return this;
 }
 
 CStr* CStr_new(Arena a, Slc s) {
   ASSERT(s.len <= 0xFF, "CStr max len = 255");
   CStr* c = (CStr*) Xr(a, alloc, s.len + 1, /*align*/1);
   if(not c) return NULL;
-  CStr_init(c, s);
-  return c;
+  return CStr_init(c, s);
 }
 
 // #################################
@@ -349,6 +349,8 @@ I4 Bst_find(Bst** node, Slc slc) {
 //
 // Returns NULL if `add.key` does not exist in the tree. Else returns the
 // existing node.
+//
+// WARNING: this does not modify add.left or add.right.
 Bst* Bst_add(Bst** root, Bst* add) {
   if(!*root) { *root = add; return NULL; } // new root
   Bst* node = *root; // prevent modification to root

@@ -296,6 +296,13 @@ TEST_UNIX(bba, 5)
   TASSERT_EQ(5, civ.ba.len);
 END_TEST_UNIX
 
+TEST_UNIX(CStr, 2)
+  BBA bba = {.ba = &civ.ba};
+  Slc expected = Slc_ntLit("this is from a slice.");
+  CStr* c = CStr_new(BBA_asArena(&bba), expected);
+  TASSERT_SLC_EQ("this is from a slice.", CStr_asSlc(c));
+END_TEST_UNIX
+
 TEST(bufFile)
   BufFile_var(f, 16, "Civboot is the foundation of a simpler technology.");
   Ring* r = &f.ring;
@@ -391,6 +398,7 @@ int main() {
   test_bst();
   test_ba();
   test_bba();
+  test_CStr();
   test_bufFile();
   test_fileRead();
   test_fileWrite();

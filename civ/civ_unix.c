@@ -41,6 +41,8 @@ void CivUnix_init(Slot numBlocks) {
 
 void CivUnix_drop() {
   for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
+  assert(NULL == civUnix.mallocs.start);
+  civ.ba = (BA) {0};
 }
 
 
