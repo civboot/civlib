@@ -255,6 +255,17 @@ Sll* Sll_pop(Sll** from) {
   return out;
 }
 
+Sll* Sll_reverse(Sll* node) {
+  Sll* prev = NULL;
+  while(node) {
+    Sll* next = node->next;
+    node->next = prev;
+    prev = node;
+    node = next;
+  }
+  return prev;
+}
+
 // ##
 // # Dll
 

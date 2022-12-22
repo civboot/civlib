@@ -94,6 +94,17 @@ void defaultErrPrinter();
 // Get the required addition/subtraction to ptr to achieve alignment
 Slot align(Slot ptr, U2 alignment);
 
+// Most common allignment
+static inline Slot alignment(Slot sz) {
+  switch (sz) {
+    case 1: return 1;
+    case 2: return 2;
+    case 3:
+    case 4: return 4;
+    default: return RSIZE;
+  }
+}
+
 // Checks the mask
 #define bitHas(V, MASK)      ( (MASK) == ((V) & (MASK)) )
 
@@ -322,6 +333,9 @@ CStr* CStr_init(CStr* this, Slc s);
 // # Sll: Singly Linked List
 void Sll_add(Sll** root, Sll* node);
 Sll* Sll_pop(Sll** root);
+
+// Reverse the linked list, returning the new start.
+Sll* Sll_reverse(Sll* node);
 
 // #################################
 // # Dll: Doubly Linked List

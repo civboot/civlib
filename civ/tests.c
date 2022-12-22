@@ -185,6 +185,13 @@ TEST(sll)
   TASSERT_EQ(root, &b);            TASSERT_EQ(b.next, &a);
   TASSERT_EQ(&b, Sll_pop(&root));  TASSERT_EQ(&a, Sll_pop(&root));
   TASSERT_EQ(NULL, Sll_pop(&root));
+
+  // root -> a -> b
+  Sll_add(&root, &b); Sll_add(&root, &a);
+  eprintf("a=%X b=%X\n", &a, &b);
+  root = Sll_reverse(root);
+  TASSERT_EQ(root,   &b)
+  TASSERT_EQ(b.next, &a);
 END_TEST
 
 TEST(dll)
