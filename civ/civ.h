@@ -98,10 +98,7 @@ static inline S alignment(S sz) {
   }
 }
 
-// Checks the mask
-#define bitHas(V, MASK)      ( (MASK) == ((V) & (MASK)) )
-
-// Clear bits in a mask.
+// Clear or set bits
 #define bitClr(V, MASK)      ((V) & (~(MASK)))
 #define bitSet(V, SET, MASK) (bitClr(V, MASK) | (SET))
 
@@ -156,7 +153,8 @@ I4   Slc_cmp(Slc a, Slc b);
 U2   Slc_move(Slc to, Slc from);
 
 #define _ntLit(STR)        .dat = STR, .len = sizeof(STR) - 1
-#define Slc_ntLit(STR)     ((Slc){ _ntLit(STR) })
+#define SLC(STR)           ((Slc){ _ntLit(STR) })
+#define Slc_ntLit(STR)     SLC(STR)
 #define Buf_ntLit(STR)     ((Buf)    { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define PlcBuf_ntLit(STR)  ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define Slc_lit(...)  (Slc){           \
@@ -365,7 +363,7 @@ typedef struct _Bst {
 //
 // This can be used like this:
 //   Bst* node = NULL;
-//   I4 cmp = Bst_find(&node, Slc_ntLit("myNode"));
+//   I4 cmp = Bst_find(&node, SLC("myNode"));
 //   // if   not node    : *node was null (Bst is empty)
 //   // elif cmp == 0    : *node key == "myNode"
 //   // elif cmp < 0     : *node key <  "myNode"
@@ -400,7 +398,7 @@ Bst* Bst_add(Bst** root, Bst* add);
   civ.fb->err = E; \
   if(not (Fiber_EXPECT_ERR & civ.fb->state)) defaultErrPrinter(); \
   longjmp(*civ.fb->errJmp, 1); }
-#define ASSERT(C, E)   do { if(!(C)) { SET_ERR(Slc_ntLit(E)); } } while(0)
+#define ASSERT(C, E)   do { if(!(C)) { SET_ERR(SLC(E)); } } while(0)
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
 
 #define TASSERT_EQ(EXPECT, CODE) if(1) { \
