@@ -43,7 +43,7 @@ typedef uint8_t              U1;
 typedef uint16_t             U2;
 typedef uint32_t             U4;
 typedef uint64_t             U8;
-typedef size_t               Slot;
+typedef size_t               S;
 
 typedef int8_t               I1;
 typedef int16_t              I2;
@@ -55,13 +55,6 @@ typedef I4                   ISlot;
 typedef I8                   ISlot;
 #endif
 
-// These are "hex" types. They are used to indicate that the value is "binary
-// like" instead of "numeric like" and should be debugged as hex with padding.
-typedef U1    H1;
-typedef U2    H2;
-typedef U4    H4;
-typedef Slot  HS;
-
 extern const U1* emptyNt; // empty null-terminated string
 
 // ####
@@ -69,7 +62,7 @@ extern const U1* emptyNt; // empty null-terminated string
 typedef struct { U1*   dat;   U2 len;                    } Slc;
 typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
 typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
-typedef struct { Slot* dat;   U2 sp;   U2 cap;           } Stk;
+typedef struct { S*    dat;   U2 sp;   U2 cap;           } Stk;
 typedef struct { U1    len;   U1 dat[];                  } CStr;
 typedef struct { U1*   dat;   U2 head; U2 tail; U2 _cap; } Ring;
 
@@ -92,10 +85,10 @@ typedef struct { Dll* start; } DllRoot;
 void defaultErrPrinter();
 
 // Get the required addition/subtraction to ptr to achieve alignment
-Slot align(Slot ptr, U2 alignment);
+S align(S ptr, U2 alignment);
 
 // Most common allignment
-static inline Slot alignment(Slot sz) {
+static inline S alignment(S sz) {
   switch (sz) {
     case 1: return 1;
     case 2: return 2;
@@ -132,18 +125,18 @@ static inline U4 ftBE4(U1* p) {
   return (*p << 24) + (*(p + 1)<<16) + (*(p + 2)<<8) + *(p + 3);
 }
 
-U4   ftBE(U1* p, Slot size);
-void srBE(U1* p, Slot size, U4 value);
+U4   ftBE(U1* p, S size);
+void srBE(U1* p, S size, U4 value);
 
 // ##
 // # min/max
 #define MIN_DEF { if(a < b) return a; return b; }
 static inline U4   U4_min (U4  a, U4  b) MIN_DEF
-static inline Slot Slot_min(Slot a, Slot b) MIN_DEF
+static inline S    S_min(S a, S b) MIN_DEF
 
 #define MAX_DEF { if(a < b) return a; return b; }
 static inline U4   U4_max (U4  a, U4  b) MAX_DEF
-static inline Slot Slot_max(Slot a, Slot b) MAX_DEF
+static inline S S_max(S a, S b) MAX_DEF
 
 // ##
 // # div
@@ -227,9 +220,9 @@ static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 // Get the number of slots in use.
 #define Stk_len(STK)             ((STK)->cap - (STK)->sp)
 
-Slot Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
-Slot Stk_top(Stk* stk); // Get stack top (without altering stack)
-void Stk_add(Stk* stk, Slot value); // add a value to the stack
+S Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
+S Stk_top(Stk* stk); // Get stack top (without altering stack)
+void Stk_add(Stk* stk, S value); // add a value to the stack
                                     //
 #define Stk_add2(STK, A, B)     Stk_add(STK, A);     Stk_add(STK, B)
 #define Stk_add3(STK, A, B, C)  Stk_add2(STK, A, B); Stk_add(STK, C)
@@ -290,9 +283,6 @@ static inline void Ring_incHead(Ring* r, U2 inc) {
 }
 
 I4  Ring_cmpSlc(Ring* r, Slc s);
-
-void Ring_h1Dbg(Ring* r, H1 h); // Write a  H1 to ring
-void Ring_h4Dbg(Ring* r, H4 h); // Write an H4 to ring in form 1234_ABCD
 
 // Remove dat[:plc], shifting data[plc:len] to the left.
 //
@@ -520,7 +510,7 @@ typedef struct _BANode {
   Block* block;
 } BANode;
 
-typedef struct { BANode* free; Slot len; } BA;
+typedef struct { BANode* free; S len; } BA;
 
 Dll*     BANode_asDll(BANode* node);
 DllRoot* BA_asDllRoot(BA* ba);
@@ -530,15 +520,15 @@ void BA_free(BA* ba, BANode* node);
 void BA_freeAll(BA* ba, BANode* nodes);
 
 // Free an array of nodes and blocks. Typically used to initialize BA.
-void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]);
+void BA_freeArray(BA* ba, S len, BANode nodes[], Block blocks[]);
 
 // #################################
 // # Arena Role
 typedef struct {
   void  (*drop)            (void* d);
-  void* (*alloc)           (void* d, Slot sz, U2 alignment);
-  Slc*  (*free)            (void* d, void* dat, Slot sz, U2 alignment);
-  Slot  (*maxAlloc)        (void* d);
+  void* (*alloc)           (void* d, S sz, U2 alignment);
+  Slc*  (*free)            (void* d, void* dat, S sz, U2 alignment);
+  S  (*maxAlloc)        (void* d);
 } MArena;
 
 
@@ -603,12 +593,12 @@ Arena    BBA_asArena(BBA* b);
 #define  BBA_block(BBA) ((BBA)->dat->block)
 
 DECLARE_METHOD(void, BBA,drop);   // BBA_drop
-DECLARE_METHOD(Slot , BBA,spare); // BBA_spare
-DECLARE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment); // BBA_alloc
+DECLARE_METHOD(S , BBA,spare); // BBA_spare
+DECLARE_METHOD(void*, BBA,alloc, S sz, U2 alignment); // BBA_alloc
 
 // BBA_free: return any error slc.
-DECLARE_METHOD(Slc* , BBA,free , void* data, Slot sz, U2 alignment); // BBA_free
-DECLARE_METHOD(Slot , BBA,maxAlloc); // BBA_maxAlloc
+DECLARE_METHOD(Slc* , BBA,free , void* data, S sz, U2 alignment); // BBA_free
+DECLARE_METHOD(S , BBA,maxAlloc); // BBA_maxAlloc
 
 MArena* mBBAGet();
 
@@ -677,7 +667,7 @@ typedef struct {
   void      (*close) (void* d);
 
   // Open a file. Platform must define File_(RDWR|RDONLY|WRONLY|TRUNC)
-  void      (*open)  (void* d, Slc path, Slot options);
+  void      (*open)  (void* d, Slc path, S options);
 
   // Stop async operations (may be noop)
   void      (*stop)  (void* d);
@@ -740,7 +730,7 @@ U1* Reader_get(Reader f, U2 i);
 
 #define File_ERROR    0xE0
 #define File_EIO      0xE2
-void File_panicOpen(void* d, Slc, Slot); // unsuported open
+void File_panicOpen(void* d, Slc, S); // unsuported open
 void File_panic(void* d); // used to panic for unsported method
 void File_noop(void* d);  // used as noop for some file methods
 
@@ -749,11 +739,6 @@ void File_noop(void* d);  // used as noop for some file methods
 static inline bool File_eof(File f) F_EOF
 static inline bool Reader_eof(Reader f) F_EOF
 #undef F_EOF
-
-
-// #################################
-// # Dbg: debug methods utilizing Writer
-void H1_err(Writer w, H1 h);
 
 // #################################
 // # BufFile

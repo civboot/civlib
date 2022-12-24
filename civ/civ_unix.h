@@ -18,16 +18,16 @@ typedef struct {
 
 extern CivUnix civUnix;;
 
-void CivUnix_init(Slot numBlocks);
+void CivUnix_init(S numBlocks);
 void CivUnix_drop();
-void CivUnix_allocBlocks(Slot numBlocks);
+void CivUnix_allocBlocks(S numBlocks);
 
 // File
 typedef struct {
   Ring      ring;     // buffer for reading or writing data
   U2        code;     // status or error (File_*)
   Sll*      nextResource; // resource SLL
-  Slot      fid;      // file id or reference
+  S         fid;      // file id or reference
 } UFile;
 
 #define File_RDWR      O_RDWR
@@ -44,7 +44,7 @@ int UFile_handleErr(UFile* f, int res);
 DECLARE_METHOD(void,      UFile,drop, Arena a);
 DECLARE_METHOD(Sll*,      UFile,resourceLL);
 DECLARE_METHOD(BaseFile*, UFile,asBase);
-DECLARE_METHOD(void,      UFile,open, Slc path, Slot options);
+DECLARE_METHOD(void,      UFile,open, Slc path, S options);
 DECLARE_METHOD(void,      UFile,close);
 DECLARE_METHOD(void,      UFile,stop);
 DECLARE_METHOD(void,      UFile,seek, ISlot offset, U1 whence);

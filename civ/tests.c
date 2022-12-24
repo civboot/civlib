@@ -79,9 +79,9 @@ TEST(plcBuf)
 END_TEST
 
 TEST(stk)
-  Slot dat[3];
+  S dat[3];
   Stk s = Stk_init(dat, 3);
-  TASSERT_EQ((Slot*)dat, s.dat); TASSERT_EQ(3, s.sp); TASSERT_EQ(3, s.cap);
+  TASSERT_EQ((S*)dat, s.dat); TASSERT_EQ(3, s.sp); TASSERT_EQ(3, s.cap);
   EXPECT_ERR(Stk_pop(&s));
   Stk_add(&s, 3);
   TASSERT_EQ(3, dat[2]); TASSERT_EQ(2, s.sp);
@@ -89,7 +89,7 @@ TEST(stk)
   Stk_add3(&s, 1, 2, 42);
   EXPECT_ERR(Stk_add(&s, 0xFF));
   TASSERT_STK(42, &s); TASSERT_STK(2, &s); TASSERT_STK(1, &s);
-  Slot a = 0, b = 0, c = 0;
+  S a = 0, b = 0, c = 0;
   Stk_add3(&s, 4, 5, 99); Stk_pop3(&s, a, b, c);
   TASSERT_EQ(4, a); TASSERT_EQ(5, b); TASSERT_EQ(99, c);
 
@@ -219,10 +219,10 @@ TEST(dll)
   DllRoot_add(&root, &b); TASSERT_EQ(b.next,     &a);
   TASSERT_EQ(a.prev, &b); TASSERT_EQ(b.prev, NULL);
 
-  TASSERT_EQ(0x12, (Slot)(DllRoot_pop(&root)->dat));
+  TASSERT_EQ(0x12, (S)(DllRoot_pop(&root)->dat));
   TASSERT_EQ(a.prev, NULL); TASSERT_EQ(a.next, NULL);
 
-  TASSERT_EQ(0x11, (Slot)(DllRoot_pop(&root)->dat));
+  TASSERT_EQ(0x11, (S)(DllRoot_pop(&root)->dat));
   TASSERT_EQ(NULL, DllRoot_pop(&root));
 END_TEST
 

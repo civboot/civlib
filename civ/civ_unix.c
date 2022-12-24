@@ -22,11 +22,11 @@ void defaultErrPrinter() {
   eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat);
 }
 
-void CivUnix_allocBlocks(Slot numBlocks) {
+void CivUnix_allocBlocks(S numBlocks) {
   void* mem = malloc(numBlocks * (BLOCK_SIZE + sizeof(BANode) + sizeof(Dll)));
   Block*  blocks = (Block*)mem;
   BANode* nodes  = (BANode*)(blocks + numBlocks);
-  assert((Slot) nodes == (Slot)mem + (BLOCK_SIZE * numBlocks));
+  assert((S) nodes == (S)mem + (BLOCK_SIZE * numBlocks));
   BA_freeArray(&civ.ba, numBlocks, nodes, blocks);
 
   Dll* mallocDll = (Dll*)(nodes + numBlocks);
@@ -34,7 +34,7 @@ void CivUnix_allocBlocks(Slot numBlocks) {
   DllRoot_add(&civUnix.mallocs, mallocDll);
 }
 
-void CivUnix_init(Slot numBlocks) {
+void CivUnix_init(S numBlocks) {
   CivUnix_allocBlocks(numBlocks);
 }
 
@@ -81,7 +81,7 @@ DEFINE_METHOD(Sll*, UFile,resourceLL) {
 
 DEFINE_METHOD(BaseFile*, UFile,asBase) { return (BaseFile*) this; }
 
-DEFINE_METHOD(void, UFile,open, Slc path, Slot options) {
+DEFINE_METHOD(void, UFile,open, Slc path, S options) {
   assert(this->code == File_CLOSED);
   assert(path.len < 255);
   uint8_t pathname[256];

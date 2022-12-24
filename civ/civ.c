@@ -18,14 +18,14 @@ void Civ_init(Fiber* fb) {
 // Most APIs only align on 4 bytes (or are unaligned)
 #define FIX_ALIGN(A) ((A == 1) ? 1 : 4)
 
-Slot align(Slot ptr, U2 alignment) {
+S align(S ptr, U2 alignment) {
   U2 need = alignment - (ptr % alignment);
   return (need == alignment) ? ptr : (ptr + need);
 }
 
 // ##
 // # Big Endian (unaligned) Fetch/Store
-U4 ftBE(U1* p, Slot size) { // fetch Big Endian
+U4 ftBE(U1* p, S size) { // fetch Big Endian
   switch(size) {
     case 1: return *p;                  case 2: return ftBE2(p);
     case 4: return ftBE4(p);
@@ -33,7 +33,7 @@ U4 ftBE(U1* p, Slot size) { // fetch Big Endian
   }
 }
 
-void srBE(U1* p, Slot size, U4 value) { // store Big Endian
+void srBE(U1* p, S size, U4 value) { // store Big Endian
   switch(size) {
     case 1: *p = value; break;
     case 2: *p = value>>8; *(p+1) = value; break;
@@ -136,17 +136,17 @@ CStr* CStr_new(Arena a, Slc s) {
 // #################################
 // # Stk: efficient first-in last-out buffer.
 
-Slot Stk_pop(Stk* stk) {
+S Stk_pop(Stk* stk) {
   ASSERT(stk->sp < stk->cap, "Stk underflow");
   return stk->dat[stk->sp ++];
 }
 
-Slot Stk_top(Stk* stk) {
+S Stk_top(Stk* stk) {
   ASSERT(stk->sp < stk->cap, "Stk_top OOB");
   return stk->dat[stk->sp];
 }
 
-void Stk_add(Stk* stk, Slot value) {
+void Stk_add(Stk* stk, S value) {
   ASSERT(stk->sp, "Stk overflow");
   stk->dat[-- stk->sp] = value;
 }
@@ -399,8 +399,8 @@ void BA_freeAll(BA* ba, BANode* nodes) {
   }
 }
 
-void BA_freeArray(BA* ba, Slot len, BANode nodes[], Block blocks[]) {
-  for(Slot i = 0; i < len; i++) {
+void BA_freeArray(BA* ba, S len, BANode nodes[], Block blocks[]) {
+  for(S i = 0; i < len; i++) {
     BANode* node = nodes + i;
     node->block  = blocks + i;
     BA_free(&civ.ba, node);
@@ -417,7 +417,7 @@ DEFINE_METHOD(void, BBA,drop) {
 }
 
 // Get spare bytes
-DEFINE_METHOD(Slot, BBA,spare) {
+DEFINE_METHOD(S, BBA,spare) {
   Block* b = BBA_block(this);
   return b->top - b->bot;
 }
@@ -433,7 +433,7 @@ static Block* BBA_allocBlock(BBA* bba) {
 }
 
 // Return block that can handle the growth or NULL
-static Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
+static Block* _allocBlockIfRequired(BBA* bba, S grow) {
   if(not bba->dat)
     return BBA_allocBlock(bba);
   Block* b = BBA_block(bba);
@@ -443,7 +443,7 @@ static Block* _allocBlockIfRequired(BBA* bba, Slot grow) {
 }
 
 
-DEFINE_METHOD(void*, BBA,alloc, Slot sz, U2 alignment) {
+DEFINE_METHOD(void*, BBA,alloc, S sz, U2 alignment) {
   ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
   if(1 == alignment) {
     // Grow up
@@ -466,7 +466,7 @@ Slc BBA_free_empty = Slc_ntLit("Free empty BBA");
 Slc BBA_free_below = Slc_ntLit("Data below block");
 Slc BBA_free_above = Slc_ntLit("Data above block");
 
-DEFINE_METHOD(Slc*, BBA,free, void* data, Slot sz, U2 alignment) {
+DEFINE_METHOD(Slc*, BBA,free, void* data, S sz, U2 alignment) {
   if(not this->dat) return &BBA_free_empty;
   Block* b = BBA_block(this);
   if((U1*)b > (U1*)data) return &BBA_free_below;
@@ -488,7 +488,7 @@ DEFINE_METHOD(Slc*, BBA,free, void* data, Slot sz, U2 alignment) {
   return NULL;
 }
 
-DEFINE_METHOD(Slot, BBA,maxAlloc) { return BLOCK_AVAIL; }
+DEFINE_METHOD(S, BBA,maxAlloc) { return BLOCK_AVAIL; }
 
 DEFINE_METHODS(MArena, BBA_mArena,
   .drop      = M_BBA_drop,
@@ -535,7 +535,7 @@ U1* Reader_get(Reader f, U2 i) {
 
 // #################################
 // # BufFile
-void File_panicOpen(void* d, Slc path, Slot options) {
+void File_panicOpen(void* d, Slc path, S options) {
   SET_ERR(Slc_ntLit("Open not supported."));
 }
 void File_panic(void* d) { SET_ERR(Slc_ntLit("Unsuported file method.")); }
