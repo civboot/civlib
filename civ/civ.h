@@ -220,6 +220,7 @@ static inline void PlcBuf_extend(PlcBuf* b, Slc s) { Buf_extend((Buf*) b, s); }
 
 S Stk_pop(Stk* stk); // pop a value from the stack, reducing it's len
 S Stk_top(Stk* stk); // Get stack top (without altering stack)
+S* Stk_topRef(Stk* stk); // get the reference to the top
 void Stk_add(Stk* stk, S value); // add a value to the stack
                                     //
 #define Stk_add2(STK, A, B)     Stk_add(STK, A);     Stk_add(STK, B)
@@ -291,6 +292,10 @@ void PlcBuf_shift(PlcBuf*);
 // CStr
 // Declare a CStr global. It's your job to assert that the LEN is valid.
 static inline Slc CStr_asSlc(CStr* c) { return (Slc) {c->dat, .len=c->len}; }
+static inline Slc CStr_asSlcMaybe(CStr* c) {
+  if(c) return CStr_asSlc(c);
+  return (Slc){NULL, .len=0};
+}
 
 #define CStr_ntLitUnchecked(NAME, LEN, STR) \
   char _CStr_ ## NAME[1 + sizeof(STR)] = LEN STR; \
@@ -321,6 +326,7 @@ CStr* CStr_init(CStr* this, Slc s);
 // # Sll: Singly Linked List
 void Sll_add(Sll** root, Sll* node);
 Sll* Sll_pop(Sll** root);
+S    Sll_len(Sll* node);
 
 // Reverse the linked list, returning the new start.
 Sll* Sll_reverse(Sll* node);
@@ -403,16 +409,18 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 #define TASSERT_EQ(EXPECT, CODE) if(1) { \
   typeof(EXPECT) __result = CODE; \
-  if((EXPECT) != __result) eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
-  assert((EXPECT) == __result); }
+  if((EXPECT) != __result) { \
+    eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
+    SET_ERR(SLC("see log")); \
+  } }
 
-#define TASSERT_SLC_EQ(EXPECT, SLC)       \
-  if(Slc_cmp(Slc_ntLit(EXPECT), SLC)) {   \
-    eprintf("!!! Slices not equal: \n  " EXPECT "\n  %.*s\n", Dat_fmt(SLC)); \
+#define TASSERT_SLC_EQ(EXPECT, S)       \
+  if(Slc_cmp(SLC(EXPECT), S)) {   \
+    eprintf("!!! Slices not equal: \n  " EXPECT "\n  %.*s\n", Dat_fmt(S)); \
     assert(false); }
 
 #define TASSERT_RING_EQ(EXPECT, RING)       \
-  if(Ring_cmpSlc(RING, Slc_ntLit(EXPECT))) {   \
+  if(Ring_cmpSlc(RING, SLC(EXPECT))) {   \
     eprintf("!!! Ring not equal: \n  " EXPECT "\n  %.*s%.*s\n", Ring_fmt1(RING), Ring_fmt2(RING)); \
     assert(false); }
 
@@ -533,6 +541,8 @@ typedef struct {
 typedef struct { const MArena* m; void* d; } Arena;
 
 // Methods that depend on arena
+Slc* Sll_free(Sll* node, U2 nodeSz, Arena a);
+
 CStr* CStr_new(Arena a, Slc s);
 
 static inline Buf Buf_new(Arena a, U2 cap) { // Note: check that buf.dat != NULL
@@ -550,7 +560,6 @@ static inline PlcBuf PlcBuf_new(Arena arena, U2 cap) {
 static inline bool PlcBuf_free(PlcBuf* p, Arena a) {
   return Buf_free(PlcBuf_asBuf(p), a);
 }
-
 
 // #################################
 // # Resource Role

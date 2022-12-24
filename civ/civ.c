@@ -29,7 +29,7 @@ U4 ftBE(U1* p, S size) { // fetch Big Endian
   switch(size) {
     case 1: return *p;                  case 2: return ftBE2(p);
     case 4: return ftBE4(p);
-    default: SET_ERR(Slc_ntLit("ftBE: invalid sz"));
+    default: SET_ERR(SLC("ftBE: invalid sz"));
   }
 }
 
@@ -39,7 +39,7 @@ void srBE(U1* p, S size, U4 value) { // store Big Endian
     case 2: *p = value>>8; *(p+1) = value; break;
     case 4: *p = value>>24; *(p+1) = value>>16; *(p+2) = value>>8; *(p+3) = value;
             break;
-    default: SET_ERR(Slc_ntLit("srBE: invalid sz"));
+    default: SET_ERR(SLC("srBE: invalid sz"));
   }
 }
 
@@ -133,6 +133,7 @@ CStr* CStr_new(Arena a, Slc s) {
   return CStr_init(c, s);
 }
 
+
 // #################################
 // # Stk: efficient first-in last-out buffer.
 
@@ -144,6 +145,11 @@ S Stk_pop(Stk* stk) {
 S Stk_top(Stk* stk) {
   ASSERT(stk->sp < stk->cap, "Stk_top OOB");
   return stk->dat[stk->sp];
+}
+
+S* Stk_topRef(Stk* stk) {
+  ASSERT(stk->sp < stk->cap, "Stk_topRef OOB");
+  return &stk->dat[stk->sp];
 }
 
 void Stk_add(Stk* stk, S value) {
@@ -255,6 +261,11 @@ Sll* Sll_pop(Sll** from) {
   return out;
 }
 
+S Sll_len(Sll* node) {
+  S len = 0; for(; node; node = node->next) len += 1;
+  return len;
+}
+
 Sll* Sll_reverse(Sll* node) {
   Sll* prev = NULL;
   while(node) {
@@ -264,6 +275,16 @@ Sll* Sll_reverse(Sll* node) {
     node = next;
   }
   return prev;
+}
+
+Slc* Sll_free(Sll* node, U2 nodeSz, Arena a) {
+  while(node) {
+    Sll* next = node->next;
+    Slc* err = Xr(a, free, node, nodeSz, alignment(nodeSz));
+    if(err) return err;
+    node = next;
+  }
+  return NULL;
 }
 
 // ##
@@ -336,7 +357,7 @@ Dll* DllRoot_pop(DllRoot* root) {
 //
 // This can be used like this:
 //   Bst* node = NULL;
-//   I4 cmp = Bst_find(&node, Slc_ntLit("myNode"));
+//   I4 cmp = Bst_find(&node, SLC("myNode"));
 //   // if   not node    : *node was null (Bst is empty)
 //   // elif cmp == 0    : *node key == "myNode"
 //   // elif cmp < 0     : *node key <  "myNode"
@@ -462,9 +483,9 @@ DEFINE_METHOD(void*, BBA,alloc, S sz, U2 alignment) {
   return (U1*)b + (*top);
 }
 
-Slc BBA_free_empty = Slc_ntLit("Free empty BBA");
-Slc BBA_free_below = Slc_ntLit("Data below block");
-Slc BBA_free_above = Slc_ntLit("Data above block");
+Slc BBA_free_empty = SLC("Free empty BBA");
+Slc BBA_free_below = SLC("Data below block");
+Slc BBA_free_above = SLC("Data above block");
 
 DEFINE_METHOD(Slc*, BBA,free, void* data, S sz, U2 alignment) {
   if(not this->dat) return &BBA_free_empty;
@@ -536,9 +557,9 @@ U1* Reader_get(Reader f, U2 i) {
 // #################################
 // # BufFile
 void File_panicOpen(void* d, Slc path, S options) {
-  SET_ERR(Slc_ntLit("Open not supported."));
+  SET_ERR(SLC("Open not supported."));
 }
-void File_panic(void* d) { SET_ERR(Slc_ntLit("Unsuported file method.")); }
+void File_panic(void* d) { SET_ERR(SLC("Unsuported file method.")); }
 void File_noop(void* d)  {}
 
 DEFINE_METHOD(void      , BufFile,drop, Arena a) {

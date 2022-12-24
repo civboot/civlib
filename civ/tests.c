@@ -33,14 +33,14 @@ TEST(basic)
   TASSERT_EQ(0x7,  bitClr(0x1F, 0x18));
   TASSERT_EQ(0x19, bitSet(0x1F, 1, 7));
 
-  EXPECT_ERR(SET_ERR(Slc_ntLit("expected 1")));
-  EXPECT_ERR(SET_ERR(Slc_ntLit("expected 2")));
+  EXPECT_ERR(SET_ERR(SLC("expected 1")));
+  EXPECT_ERR(SET_ERR(SLC("expected 2")));
 END_TEST
 
 TEST(slc)
-  Slc a = Slc_ntLit("aaa");
+  Slc a = SLC("aaa");
   Slc b = Slc_lit('a', 'b', 'b', 'd');
-  Slc c = Slc_ntLit("abc");
+  Slc c = SLC("abc");
 
   TASSERT_EQ(3, a.len); TASSERT_EQ('a', a.dat[0]);
   TASSERT_EQ(0,  Slc_cmp(a, a));
@@ -49,14 +49,14 @@ TEST(slc)
   TASSERT_EQ(1,  Slc_cmp(b, a));
   TASSERT_EQ(1,  Slc_cmp(c, b));
 
-  Slc c0 = Slc_ntLit("abc");
+  Slc c0 = SLC("abc");
   TASSERT_EQ(0, Slc_cmp(c, c0));
 END_TEST
 
 TEST(buf)
   Buf_var(b, 10);
   TASSERT_EQ(0, b.len); TASSERT_EQ(10, b.cap);
-  Buf_extend(&b, Slc_ntLit("hello"));
+  Buf_extend(&b, SLC("hello"));
   TASSERT_EQ(5, b.len);
 
   Buf_clear(&b); Buf_addBE2(&b, 0x1234);
@@ -71,10 +71,10 @@ END_TEST
 TEST(plcBuf)
   char dat[] = "foo bar baz";
   PlcBuf pb = (PlcBuf){.dat = dat, .len = 11, .cap = 11};
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("foo bar baz"), *PlcBuf_asSlc(&pb)));
+  TASSERT_EQ(0, Slc_cmp(SLC("foo bar baz"), *PlcBuf_asSlc(&pb)));
   TASSERT_EQ(0, pb.plc); TASSERT_EQ(11, pb.cap);
   pb.plc = 4; PlcBuf_shift(&pb);
-  TASSERT_EQ(0, Slc_cmp(*PlcBuf_asSlc(&pb), Slc_ntLit("bar baz")));
+  TASSERT_EQ(0, Slc_cmp(*PlcBuf_asSlc(&pb), SLC("bar baz")));
 
 END_TEST
 
@@ -117,7 +117,7 @@ TEST(ring)
   TASSERT_EQ(8, avail.len); assert(dat + 1 == avail.dat);
   TASSERT_EQ('a', Ring_get(&r, 0));
 
-  Ring_extend(&r, Slc_ntLit("bcde"));
+  Ring_extend(&r, SLC("bcde"));
   TASSERT_EQ(0, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(0, memcmp(dat, "abcde", 5));
   TASSERT_EQ('e', Ring_get(&r, 4));
@@ -126,17 +126,17 @@ TEST(ring)
   TASSERT_EQ(1, r.head); TASSERT_EQ(5, r.tail);
   TASSERT_EQ(4, Ring_len(&r));
 
-  Ring_extend(&r, Slc_ntLit("ABCD"));
+  Ring_extend(&r, SLC("ABCD"));
   TASSERT_EQ(9, r.tail);  TASSERT_EQ(8, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 1, "bcdeABCD", 8));
   TASSERT_SLC_EQ("bcdeABCD", Ring_1st(&r));
   TASSERT_EQ(0, Ring_2nd(&r).len);
-  TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("bcdeABCD")));
+  TASSERT_EQ(0, Ring_cmpSlc(&r, SLC("bcdeABCD")));
   avail = Ring_avail(&r);
   TASSERT_EQ(1, avail.len); assert(dat + 9 == avail.dat);
 
   // Cannot add len 3
-  EXPECT_ERR( Ring_extend(&r, Slc_ntLit("WXY")) );
+  EXPECT_ERR( Ring_extend(&r, SLC("WXY")) );
   TASSERT_EQ(8, Ring_len(&r));
 
   // Fill up
@@ -149,7 +149,7 @@ TEST(ring)
   TASSERT_EQ(2, r.head);
   r.head = 4;
   TASSERT_EQ(6, Ring_len(&r));
-  Ring_extend(&r, Slc_ntLit("fgh"));
+  Ring_extend(&r, SLC("fgh"));
   TASSERT_EQ(9, Ring_len(&r));
   TASSERT_EQ(0, memcmp(dat + 4, "eABCDe", 6));
   TASSERT_EQ(0, memcmp(dat, "fgh", 3));
@@ -157,10 +157,10 @@ TEST(ring)
   avail = Ring_avail(&r);
   TASSERT_EQ(0, avail.len); assert(dat + 3 == avail.dat);
 
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("eABCDe"), Ring_1st(&r)));
-  TASSERT_EQ(0, Slc_cmp(Slc_ntLit("fgh"), Ring_2nd(&r)));
-  TASSERT_EQ(0, Ring_cmpSlc(&r, Slc_ntLit("eABCDefgh")));
-  TASSERT_EQ(1, Ring_cmpSlc(&r, Slc_ntLit("aABCDefgh")));
+  TASSERT_EQ(0, Slc_cmp(SLC("eABCDe"), Ring_1st(&r)));
+  TASSERT_EQ(0, Slc_cmp(SLC("fgh"), Ring_2nd(&r)));
+  TASSERT_EQ(0, Ring_cmpSlc(&r, SLC("eABCDefgh")));
+  TASSERT_EQ(1, Ring_cmpSlc(&r, SLC("aABCDefgh")));
 
   // Wrap around read
   r.head = 8;
@@ -175,7 +175,7 @@ TEST(ring)
   TASSERT_EQ(true, Ring_isFull(&r));
 END_TEST
 
-TEST(sll)
+TEST_UNIX(sll, 2)
   // create b -> a and then assert.
   Sll* root = NULL;
   Sll a = {0}; Sll b = {0};
@@ -186,12 +186,16 @@ TEST(sll)
   TASSERT_EQ(&b, Sll_pop(&root));  TASSERT_EQ(&a, Sll_pop(&root));
   TASSERT_EQ(NULL, Sll_pop(&root));
 
-  // root -> a -> b
+  // Clone
   Sll_add(&root, &b); Sll_add(&root, &a);
+  a.dat = (void*)42; b.dat = (void*)43;
+
+  // root -> a -> b
   eprintf("a=%X b=%X\n", &a, &b);
   root = Sll_reverse(root);
   TASSERT_EQ(root,   &b)
   TASSERT_EQ(b.next, &a);
+  TASSERT_EQ(43, (U4) root->dat);
 END_TEST
 
 TEST(dll)
@@ -230,7 +234,7 @@ TEST(bst)
   Bst a, b, c;
 
   Bst* node = NULL;
-  Bst_find(&node, Slc_ntLit("aaa"));
+  Bst_find(&node, SLC("aaa"));
   assert(NULL == node);
 
   CStr_ntVar(key_a, "\x03", "aaa");
@@ -305,7 +309,7 @@ END_TEST_UNIX
 
 TEST_UNIX(CStr, 2)
   BBA bba = {.ba = &civ.ba};
-  Slc expected = Slc_ntLit("this is from a slice.");
+  Slc expected = SLC("this is from a slice.");
   CStr* c = CStr_new(BBA_asArena(&bba), expected);
   TASSERT_SLC_EQ("this is from a slice.", CStr_asSlc(c));
 END_TEST_UNIX
@@ -316,21 +320,21 @@ TEST(bufFile)
 
   TASSERT_EQ(50, f.b.len);
   BufFile_read(&f);
-  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("Civboot is the f")));
+  TASSERT_EQ(0, Ring_cmpSlc(r, SLC("Civboot is the f")));
   TASSERT_EQ(16, f.b.plc);
 
   Ring_incHead(r, 6);
   BufFile_read(&f);
-  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("t is the fo")));
+  TASSERT_EQ(0, Ring_cmpSlc(r, SLC("t is the fo")));
   BufFile_read(&f);
-  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("t is the foundat")));
+  TASSERT_EQ(0, Ring_cmpSlc(r, SLC("t is the foundat")));
   TASSERT_EQ(22, f.b.plc);
 
   Ring_clear(r);
-  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("ion of a simpler")));
+  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, SLC("ion of a simpler")));
 
   Ring_clear(r);
-  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit(" technology.")));
+  BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, SLC(" technology.")));
   TASSERT_EQ(File_EOF, f.code);
   EXPECT_ERR(BufFile_read(&f));
 END_TEST
@@ -338,7 +342,7 @@ END_TEST
 TEST(fileRead)
   UFile f = UFile_malloc(20);
   Ring* r = &f.ring;
-  UFile_open(&f, Slc_ntLit("data/UFile_test.txt"), File_RDONLY);
+  UFile_open(&f, SLC("data/UFile_test.txt"), File_RDONLY);
   TASSERT_EQ(File_DONE, f.code);
   TASSERT_EQ(0, Ring_len(&f.ring));
   TASSERT_EQ(0, f.ring.head);
@@ -355,13 +359,13 @@ TEST(fileRead)
   // Now use it like a parser. Inc part of the ring.
   Ring_incHead(r, 16); UFile_readAll(&f);
   assert(Ring_len(r) == 19); assert(f.code == File_DONE);
-  assert(0 == Ring_cmpSlc(r, Slc_ntLit("haiku\nand the job i")));
+  assert(0 == Ring_cmpSlc(r, SLC("haiku\nand the job i")));
 
   // Again, inc part of the ring.
   Ring_incHead(r, 18); UFile_readAll(&f);
   TASSERT_EQ(9, Ring_len(r));
   TASSERT_EQ(f.code, File_EOF);
-  assert(0 == Ring_cmpSlc(r, Slc_ntLit("is done\n\n")));
+  assert(0 == Ring_cmpSlc(r, SLC("is done\n\n")));
   UFile_close(&f);
   free(r->dat);
 END_TEST
@@ -369,16 +373,16 @@ END_TEST
 TEST(fileWrite)
   UFile f = UFile_malloc(20);
   Ring* r = &f.ring;
-  Slc path = Slc_ntLit("bin/UFile_test.txt");
+  Slc path = SLC("bin/UFile_test.txt");
   UFile_open(&f, path, File_WRONLY | File_CREATE | File_TRUNC);
   TASSERT_EQ(File_DONE, f.code);
-  Ring_extend(r, Slc_ntLit("hello there! My "));
+  Ring_extend(r, SLC("hello there! My "));
   UFile_write(&f);
   TASSERT_EQ(true, Ring_isEmpty(r)); TASSERT_EQ(File_DONE, f.code);
   UFile_stop(&f);
 
   Ring_clear(r);
-  Ring_extend(r, Slc_ntLit("name is Joe!"));
+  Ring_extend(r, SLC("name is Joe!"));
   UFile_write(&f);
   TASSERT_EQ(File_DONE, f.code);
   TASSERT_EQ(true, Ring_isEmpty(r));
@@ -386,7 +390,7 @@ TEST(fileWrite)
   UFile_close(&f); Ring_clear(r);
   UFile_open(&f, path, File_RDONLY); TASSERT_EQ(f.code, File_DONE);
   UFile_read(&f); TASSERT_EQ(f.code, File_DONE);
-  TASSERT_EQ(0, Ring_cmpSlc(r, Slc_ntLit("hello there! My nam")));
+  TASSERT_EQ(0, Ring_cmpSlc(r, SLC("hello there! My nam")));
 
   UFile_close(&f);
   free(r->dat);
