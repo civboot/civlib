@@ -400,9 +400,11 @@ Bst* Bst_add(Bst** root, Bst* add);
     }
 #define END_TEST  }
 
+#define ERR_EXPECTED  (Fiber_EXPECT_ERR & civ.fb->state)
+
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
-  if(not (Fiber_EXPECT_ERR & civ.fb->state)) defaultErrPrinter(); \
+  if(not ERR_EXPECTED) defaultErrPrinter(); \
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   do { if(!(C)) { SET_ERR(SLC(E)); } } while(0)
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
@@ -440,6 +442,8 @@ Bst* Bst_add(Bst** root, Bst* add);
     civ.fb->errJmp = LINED(prevJmp);      \
     HANDLE;                               \
   } else { CODE; }
+
+
 
 // Execute CODE and expect an error longjmp
 #define EXPECT_ERR(CODE)                  \

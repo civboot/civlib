@@ -191,7 +191,6 @@ TEST_UNIX(sll, 2)
   a.dat = (void*)42; b.dat = (void*)43;
 
   // root -> a -> b
-  eprintf("a=%X b=%X\n", &a, &b);
   root = Sll_reverse(root);
   TASSERT_EQ(root,   &b)
   TASSERT_EQ(b.next, &a);

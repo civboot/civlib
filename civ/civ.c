@@ -463,7 +463,6 @@ static Block* _allocBlockIfRequired(BBA* bba, S grow) {
   return b;
 }
 
-
 DEFINE_METHOD(void*, BBA,alloc, S sz, U2 alignment) {
   ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
   if(1 == alignment) {
@@ -486,8 +485,10 @@ DEFINE_METHOD(void*, BBA,alloc, S sz, U2 alignment) {
 Slc BBA_free_empty = SLC("Free empty BBA");
 Slc BBA_free_below = SLC("Data below block");
 Slc BBA_free_above = SLC("Data above block");
+Slc BBA_unorderedSz  = SLC("unordered free: sz");
 
 DEFINE_METHOD(Slc*, BBA,free, void* data, S sz, U2 alignment) {
+  if(not data) return NULL;
   if(not this->dat) return &BBA_free_empty;
   Block* b = BBA_block(this);
   if((U1*)b > (U1*)data) return &BBA_free_below;
@@ -495,11 +496,11 @@ DEFINE_METHOD(Slc*, BBA,free, void* data, S sz, U2 alignment) {
 
   U2 plc = (U2)((U1*)data - (U1*)b);
   if(1 == alignment) {
-    ASSERT(plc == b->bot - sz, "unordered free: sz");
+    if(plc != b->bot - sz) return &BBA_unorderedSz;
     b->bot = plc;
   } else {
     sz = align(sz, FIX_ALIGN(alignment));
-    ASSERT(plc <= b->top, "unordered free: sz");
+    if(plc > b->top) return &BBA_unorderedSz;
     b->top = plc + sz;
   }
 
