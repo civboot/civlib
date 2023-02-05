@@ -68,7 +68,7 @@ typedef struct { U1*   dat;   U2 head; U2 tail; U2 _cap; } Ring;
 
 typedef struct _Sll {
   struct _Sll* next;
-  void* dat;
+  S            dat;
 } Sll;
 
 typedef struct _Dll {
