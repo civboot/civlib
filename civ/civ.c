@@ -35,10 +35,9 @@ U4 ftBE(U1* p, S size) { // fetch Big Endian
 
 void srBE(U1* p, S size, U4 value) { // store Big Endian
   switch(size) {
-    case 1: *p = value; break;
-    case 2: *p = value>>8; *(p+1) = value; break;
-    case 4: *p = value>>24; *(p+1) = value>>16; *(p+2) = value>>8; *(p+3) = value;
-            break;
+    case 1: *p = value;      break;
+    case 2: srBE2(p, value); break;
+    case 4: srBE4(p, value); break;
     default: SET_ERR(SLC("srBE: invalid sz"));
   }
 }
@@ -79,17 +78,14 @@ void Buf_add(Buf* b, U1 v) {
 
 void Buf_addBE2(Buf* b, U2 v) {
   ASSERT(b->len + 1 < b->cap, "Buf addBE2 OOB");
-  _Buf_add(b, v >> 8);
-  _Buf_add(b, v);
+  srBE2(b->dat + b->len, v);
+  b->len += 2;
 }
 
 void Buf_addBE4(Buf* b, U4 v) {
   U2 len = b->len;
   ASSERT(len + 3 < b->cap, "Buf addBE4 OOB");
-  b->dat[len]   = v >> 24;
-  b->dat[len+1] = v >> 16;
-  b->dat[len+2] = v >> 8;
-  b->dat[len+3] = v;
+  srBE4(b->dat + b->len, v);
   b->len += 4;
 }
 

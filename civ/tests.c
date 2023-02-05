@@ -188,13 +188,13 @@ TEST_UNIX(sll, 2)
 
   // Clone
   Sll_add(&root, &b); Sll_add(&root, &a);
-  a.dat = (void*)42; b.dat = (void*)43;
+  a.dat = 42; b.dat = 43;
 
   // root -> a -> b
   root = Sll_reverse(root);
   TASSERT_EQ(root,   &b)
   TASSERT_EQ(b.next, &a);
-  TASSERT_EQ(43, (U4) root->dat);
+  TASSERT_EQ(43, root->dat);
 END_TEST
 
 TEST(dll)

@@ -116,10 +116,14 @@ static inline S alignment(S sz) {
 // difference of this custom.  Similarily, hardware architects at the dawn of
 // computing were going to war over big/little endianness.
 
-static inline U1 ftBE1(U1* p) { return *p; }
 static inline U2 ftBE2(U1* p) { return (*p<<8) + *(p + 1); }
 static inline U4 ftBE4(U1* p) {
   return (*p << 24) + (*(p + 1)<<16) + (*(p + 2)<<8) + *(p + 3);
+}
+
+static inline void srBE2(U1* p, U2 value) { *p = value>>8; *(p+1) = value; }
+static inline void srBE4(U1* p, U4 value) {
+ *p = value>>24; *(p+1) = value>>16; *(p+2) = value>>8; *(p+3) = value;
 }
 
 U4   ftBE(U1* p, S size);
