@@ -27,7 +27,7 @@ void Trace_print(Trace* t) {
   if(t->ctx) {
     eprintf("!! Received signal \"%s\" (%u)\n", strsignal(t->sig), t->sig);
   }
-  eprintf("!! Backtrace [fb.err='%.*s']:\n", Dat_fmt(civ.fb->err));
+  eprintf("!!! C backtrace [fb.err='%.*s']:\n", Dat_fmt(civ.fb->err));
   char syscom[256];
   for(int i=0; i < t->trace.len; i++) {
     eprintf("#%d %-50s ", i, t->messages[i]);
@@ -51,6 +51,10 @@ void Trace_handleSig(int sig, struct sigcontext* ctx) {
   Trace t = Trace_newSig(STACK_TRACE_DEPTH, sig, ctx);
   Trace_print(&t);
   Trace_free(&t);
+  // TODO: glibc currently has a bug where backtrace() overwrites memory:
+  // https://sourceware.org/bugzilla/show_bug.cgi?id=30106
+  eprintf("! exiting after trace print !\n");
+  exit(sig);
 }
 
 void defaultHandleSig(int sig, struct sigcontext ctx) {
@@ -103,8 +107,8 @@ UFile UFile_new(Ring ring) {
 }
 
 int UFile_handleErr(UFile* f, int res) {
-  if(errno == EWOULDBLOCK) { errno = 0; return res; }
-  if(res < 0) { f->code = File_EIO; return 0; }
+  if(errno == EWOULDBLOCK) { errno = 0; return 0; }
+  if(res < 0) { f->code = File_EIO; }
   return res;
 }
 
@@ -156,6 +160,7 @@ DEFINE_METHOD(void, UFile,read) {
   if(avail.len) {
     len = read(this->fid, avail.dat, avail.len);
     len = UFile_handleErr(this, len);
+    if(len < 0) return;
     Ring_incTail(r, len);
   }
   if(Ring_isFull(r)) { this->code = File_DONE; }
@@ -170,6 +175,7 @@ DEFINE_METHOD(void, UFile,write) {
   this->code = File_WRITING;
   int len = write(this->fid, first.dat, first.len);
   len     = UFile_handleErr(this, len);
+  if(len < 0) return;
   Ring_incHead(r, len);
   if(Ring_isEmpty(r)) this->code = File_DONE;
 }
