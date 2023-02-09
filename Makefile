@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-m32 -g -rdynamic
+FLAGS=-m32 -no-pie -g -rdynamic
 DISABLE_WARNINGS=-Wno-pointer-sign -Wno-format
 FILES=civ/*.c
 OUT=bin/tests

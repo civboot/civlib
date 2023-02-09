@@ -1,7 +1,9 @@
 #ifndef __CIV_UNIX_H
 #define __CIV_UNIX_H
 
-#include <fcntl.h>  // creat, open
+#include <fcntl.h>  // create, open
+#include <execinfo.h>
+#include <signal.h>
 #include "./civ.h"
 
 #define TEST_UNIX(NAME, numBlocks) \
@@ -12,9 +14,21 @@
 #define END_TEST_UNIX \
     CivUnix_drop(); END_TEST
 
+#define SETUP_SIG(HANDLE_SIG)  \
+  struct sigaction _sa;        \
+  _sa.sa_handler = HANDLE_SIG; \
+  sigemptyset(&_sa.sa_mask);   \
+  _sa.sa_flags = SA_RESTART;   \
+  sigaction(SIGSEGV, &_sa, NULL);
+  /* ... add your own signals */
+
+
 typedef struct {
   DllRoot mallocs;
 } CivUnix;
+
+Trace Trace_newSig(int cap, int sig, struct sigcontext* ctx);
+void  Trace_handleSig(int sig, struct sigcontext ctx);
 
 extern CivUnix civUnix;;
 

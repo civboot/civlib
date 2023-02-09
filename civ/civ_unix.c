@@ -4,22 +4,60 @@
 
 /*extern*/ CivUnix civUnix          = (CivUnix) {};
 
-#include <execinfo.h>
 
-#define BT_SIZE   128
-void printTrace() {
-  void*    array[BT_SIZE];
-  int      size    = backtrace(array, BT_SIZE);
-  char**   strings =  backtrace_symbols(array, size);
-  assert(strings); // No debug symbols found
-  for(int i = 2; i < size; i++) printf("  %s\n", strings[i]);
-  free(strings);
+// Trace(unix) is adapted from https://stackoverflow.com/a/15130037/1036670
+// License CC BY-SA 3.0 @Saqlain
+Trace Trace_newSig(int cap, int sig, struct sigcontext* ctx) {
+  Trace t = (Trace) {
+    .trace = (SBuf) { .dat = malloc(sizeof(S) * cap), .cap = cap },
+    .ctx = ctx, .sig = sig
+  };
+  assert(t.trace.dat);
+  t.trace.len = backtrace((void**)t.trace.dat, t.trace.cap);
+  if(ctx) t.trace.dat[1] = ctx->eip; // overwrite sigaction with caller's addr
+  t.messages = backtrace_symbols((void*)t.trace.dat, t.trace.cap);
+  assert(t.messages);
+  return t;
+}
+
+// We ignore the arena since we have to malloc for Trace messages anyway
+Trace Trace_new(Arena* _unused, int cap) { return Trace_newSig(cap, 0, NULL); }
+
+void Trace_print(Trace* t) {
+  if(t->ctx) {
+    eprintf("!! Signal %s [%u]\n", strsignal(t->sig), t->sig);
+  }
+  eprintf("!! Backtrace [fb.err='%.*s']:\n", Dat_fmt(civ.fb->err));
+  char syscom[256];
+  for(int i=0; i < t->trace.len; i++) {
+    eprintf("#%d %-50s ", i, t->messages[i]);
+    if(APP_NAME.dat) {
+      sprintf(syscom,"addr2line %p -e %.*s", t->trace.dat[i], Dat_fmt(APP_NAME));
+      system(syscom);
+    } else {
+      eprintf("(set APP_NAME=argv[0] for stack trace)\n");
+    }
+  }
+}
+
+void Trace_free(Trace* t) {
+  free(t->trace.dat);
+  free(t->messages);
+}
+
+#define STACK_TRACE_DEPTH 100
+
+void Trace_handleSig(int sig, struct sigcontext ctx) {
+  Trace t = Trace_newSig(STACK_TRACE_DEPTH, sig, &ctx);
+  Trace_print(&t);
+  Trace_free(&t);
+  exit(sig);
 }
 
 void defaultErrPrinter() {
-  eprintf("!! Encountered error. Stack trace:\n");
-  printTrace();
-  eprintf("!! Error: %.*s\n", civ.fb->err.len, civ.fb->err.dat);
+  Trace t = Trace_new(NULL, STACK_TRACE_DEPTH);
+  Trace_print(&t);
+  Trace_free(&t);
 }
 
 void CivUnix_allocBlocks(S numBlocks) {

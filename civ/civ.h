@@ -61,6 +61,7 @@ extern const U1* emptyNt; // empty null-terminated string
 // # Core Structs
 typedef struct { U1*   dat;   U2 len;                    } Slc;
 typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
+typedef struct { S*    dat;   U2 len;  U2 cap;           } SBuf;
 typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
 typedef struct { S*    dat;   U2 sp;   U2 cap;           } Stk;
 typedef struct { U1    len;   U1 dat[];                  } CStr;
@@ -78,6 +79,19 @@ typedef struct _Dll {
 } Dll;
 
 typedef struct { Dll* start; } DllRoot;
+
+// ####
+// # Debug types and functions
+
+typedef struct {
+  SBuf trace;
+  char** messages;
+  struct sigcontext* ctx; // can be NULL
+  int sig;
+} Trace;
+
+void  Trace_print(Trace* t);
+void  Trace_free(Trace* t);
 
 // ####
 // # Core functions
@@ -158,7 +172,6 @@ U2   Slc_move(Slc to, Slc from);
 
 #define _ntLit(STR)        .dat = STR, .len = sizeof(STR) - 1
 #define SLC(STR)           ((Slc){ _ntLit(STR) })
-#define Slc_ntLit(STR)     SLC(STR)
 #define Buf_ntLit(STR)     ((Buf)    { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define PlcBuf_ntLit(STR)  ((PlcBuf) { _ntLit(STR), .cap = sizeof(STR) - 1 })
 #define Slc_lit(...)  (Slc){           \
@@ -312,6 +325,11 @@ static inline Slc CStr_asSlcMaybe(CStr* c) {
   static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
 
+static inline Slc Slc_ntLit(U1* s) {
+  if(not s) return (Slc) { .dat = NULL };
+  return (Slc) { .dat = s, .len = strlen(s) };
+}
+
 static inline bool CStr_varAssert(U4 line, U1* str, U1* len) {
   if(1 != strlen(len)) {
     eprintf("ERROR CStr_var [line=%u]: LEN must be single byte (line=%u)");
@@ -417,7 +435,7 @@ Bst* Bst_add(Bst** root, Bst* add);
   typeof(EXPECT) __result = CODE; \
   if((EXPECT) != __result) { \
     eprintf("!!! Assertion failed: 0x%X == 0x%X\n", EXPECT, __result); \
-    SET_ERR(SLC("see log")); \
+    SET_ERR(SLC("assertion failed, see stderr")); \
   } }
 
 #define TASSERT_SLC_EQ(EXPECT, S)       \
@@ -569,6 +587,8 @@ static inline bool PlcBuf_free(PlcBuf* p, Arena a) {
   return Buf_free(PlcBuf_asBuf(p), a);
 }
 
+Trace Trace_new(Arena* a, int cap);
+
 // #################################
 // # Resource Role
 typedef struct {
@@ -641,7 +661,8 @@ typedef struct {
   void (*errPrinter)();
 } Civ;
 
-extern Civ civ;
+extern Slc        APP_NAME; // argv[0], used for debugging
+extern Civ        civ;
 
 void Civ_init(Fiber* fb);
 

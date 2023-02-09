@@ -3,6 +3,7 @@
 
 #include "./civ.h"
 
+/*extern*/ Slc APP_NAME = (Slc) { .dat = NULL };
 /*extern*/ const U1* emptyNt = "";
 /*extern*/ jmp_buf* err_jmp = NULL;
 /*extern*/ U2 civErr        = 0;
