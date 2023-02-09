@@ -396,10 +396,9 @@ TEST(fileWrite)
 END_TEST
 
 int main(int argc, char *argv[]) {
-  APP_NAME = Slc_ntLit(argv[0]);
+  ARGV = argv;
   SETUP_SIG((void *)Trace_handleSig);
 
-  /* ... add any other signal here */
   eprintf("# Starting Tests\n");
   test_basic();
   test_slc();
@@ -417,9 +416,6 @@ int main(int argc, char *argv[]) {
   test_fileRead();
   test_fileWrite();
   eprintf("# Tests All Pass\n");
-
-
-
   return 0;
 }
 

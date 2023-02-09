@@ -3,11 +3,11 @@
 
 #include "./civ.h"
 
-/*extern*/ Slc APP_NAME = (Slc) { .dat = NULL };
+/*extern*/ char** ARGV       = NULL;
 /*extern*/ const U1* emptyNt = "";
-/*extern*/ jmp_buf* err_jmp = NULL;
-/*extern*/ U2 civErr        = 0;
-/*extern*/ Civ civ          = (Civ) {0};
+/*extern*/ jmp_buf* err_jmp  = NULL;
+/*extern*/ U2 civErr         = 0;
+/*extern*/ Civ civ           = (Civ) {0};
 
 void Civ_init(Fiber* fb) {
   civ = (Civ) {.fb = fb};

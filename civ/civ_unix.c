@@ -25,14 +25,14 @@ Trace Trace_new(Arena* _unused, int cap) { return Trace_newSig(cap, 0, NULL); }
 
 void Trace_print(Trace* t) {
   if(t->ctx) {
-    eprintf("!! Signal %s [%u]\n", strsignal(t->sig), t->sig);
+    eprintf("!! Received signal \"%s\" (%u)\n", strsignal(t->sig), t->sig);
   }
   eprintf("!! Backtrace [fb.err='%.*s']:\n", Dat_fmt(civ.fb->err));
   char syscom[256];
   for(int i=0; i < t->trace.len; i++) {
     eprintf("#%d %-50s ", i, t->messages[i]);
-    if(APP_NAME.dat) {
-      sprintf(syscom,"addr2line %p -e %.*s", t->trace.dat[i], Dat_fmt(APP_NAME));
+    if(ARGV) {
+      sprintf(syscom,"addr2line %p -e %s", t->trace.dat[i], ARGV[0]);
       system(syscom);
     } else {
       eprintf("(set APP_NAME=argv[0] for stack trace)\n");

@@ -661,7 +661,7 @@ typedef struct {
   void (*errPrinter)();
 } Civ;
 
-extern Slc        APP_NAME; // argv[0], used for debugging
+extern char**     ARGV;
 extern Civ        civ;
 
 void Civ_init(Fiber* fb);
