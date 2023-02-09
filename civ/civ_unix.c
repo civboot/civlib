@@ -47,18 +47,18 @@ void Trace_free(Trace* t) {
 
 #define STACK_TRACE_DEPTH 100
 
-void Trace_handleSig(int sig, struct sigcontext ctx) {
-  Trace t = Trace_newSig(STACK_TRACE_DEPTH, sig, &ctx);
+void Trace_handleSig(int sig, struct sigcontext* ctx) {
+  Trace t = Trace_newSig(STACK_TRACE_DEPTH, sig, ctx);
   Trace_print(&t);
   Trace_free(&t);
+}
+
+void defaultHandleSig(int sig, struct sigcontext ctx) {
+  Trace_handleSig(sig, &ctx);
   exit(sig);
 }
 
-void defaultErrPrinter() {
-  Trace t = Trace_new(NULL, STACK_TRACE_DEPTH);
-  Trace_print(&t);
-  Trace_free(&t);
-}
+void defaultErrPrinter() { Trace_handleSig(0, NULL); }
 
 void CivUnix_allocBlocks(S numBlocks) {
   void* mem = malloc(numBlocks * (BLOCK_SIZE + sizeof(BANode) + sizeof(Dll)));
@@ -104,7 +104,7 @@ UFile UFile_new(Ring ring) {
 
 int UFile_handleErr(UFile* f, int res) {
   if(errno == EWOULDBLOCK) { errno = 0; return res; }
-  if(res < 0) { eprintf("?? error: %X\n", -res); f->code = File_EIO; return 0; }
+  if(res < 0) { f->code = File_EIO; return 0; }
   return res;
 }
 

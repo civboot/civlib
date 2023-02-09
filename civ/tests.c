@@ -390,14 +390,12 @@ TEST(fileWrite)
   UFile_open(&f, path, File_RDONLY); TASSERT_EQ(f.code, File_DONE);
   UFile_read(&f); TASSERT_EQ(f.code, File_DONE);
   TASSERT_EQ(0, Ring_cmpSlc(r, SLC("hello there! My nam")));
-
   UFile_close(&f);
-  free(r->dat);
 END_TEST
 
 int main(int argc, char *argv[]) {
   ARGV = argv;
-  SETUP_SIG((void *)Trace_handleSig);
+  SETUP_SIG((void *)defaultHandleSig);
 
   eprintf("# Starting Tests\n");
   test_basic();

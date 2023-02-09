@@ -28,7 +28,8 @@ typedef struct {
 } CivUnix;
 
 Trace Trace_newSig(int cap, int sig, struct sigcontext* ctx);
-void  Trace_handleSig(int sig, struct sigcontext ctx);
+void  Trace_handleSig(int sig, struct sigcontext* ctx);
+void defaultHandleSig(int sig, struct sigcontext ctx);
 
 extern CivUnix civUnix;;
 

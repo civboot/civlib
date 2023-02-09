@@ -13,6 +13,11 @@ void Civ_init(Fiber* fb) {
   civ = (Civ) {.fb = fb};
 }
 
+void runErrPrinter() {
+  if(civ.errPrinter) civ.errPrinter();
+  else               defaultErrPrinter();
+}
+
 // ####
 // # Core methods
 

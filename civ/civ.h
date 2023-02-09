@@ -97,6 +97,7 @@ void  Trace_free(Trace* t);
 // # Core functions
 
 void defaultErrPrinter();
+void runErrPrinter();
 
 // Get the required addition/subtraction to ptr to achieve alignment
 S align(S ptr, U2 alignment);
@@ -416,8 +417,7 @@ Bst* Bst_add(Bst** root, Bst* add);
     Civ_init(&fb);                         \
     eprintf("## Testing " #NAME "...\n");  \
     if(setjmp(localErrJmp)) {              \
-      if(civ.errPrinter) civ.errPrinter(); \
-      else defaultErrPrinter();            \
+      eprintf("!! test failed with error !!\n"); \
       exit(1);                             \
     }
 #define END_TEST  }
@@ -426,7 +426,7 @@ Bst* Bst_add(Bst** root, Bst* add);
 
 #define SET_ERR(E)  if(true) { \
   civ.fb->err = E; \
-  if(not ERR_EXPECTED) defaultErrPrinter(); \
+  if(not ERR_EXPECTED) runErrPrinter(); \
   longjmp(*civ.fb->errJmp, 1); }
 #define ASSERT(C, E)   do { if(!(C)) { SET_ERR(SLC(E)); } } while(0)
 #define ASSERT_NO_ERR()    assert(!civ.fb->err)
@@ -657,7 +657,7 @@ typedef struct {
   BA         ba;    // root block allocator
   Fiber*     fb;    // currently executing fiber
 
-  // Misc (normally not set/read)
+  // Misc
   void (*errPrinter)();
 } Civ;
 
