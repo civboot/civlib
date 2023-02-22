@@ -60,6 +60,7 @@ extern const U1* emptyNt; // empty null-terminated string
 // ####
 // # Core Structs
 typedef struct { U1*   dat;   U2 len;                    } Slc;
+typedef Slc                                                Str;
 typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
 typedef struct { S*    dat;   U2 len;  U2 cap;           } SBuf;
 typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
@@ -382,28 +383,28 @@ Dll* DllRoot_pop(DllRoot* root);
 
 // #################################
 // # Binary Search Tree
-typedef struct _Bst {
-  struct _Bst* l; struct _Bst* r;
+typedef struct _CBst {
+  struct _CBst* l; struct _CBst* r;
   CStr* key;
-} Bst;
+} CBst;
 
-// Find slice in Bst, starting at `*node`. Set result to `*node`
+// Find slice in CBst, starting at `*node`. Set result to `*node`
 // Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
 //
 // This can be used like this:
-//   Bst* node = NULL;
-//   I4 cmp = Bst_find(&node, SLC("myNode"));
-//   // if   not node    : *node was null (Bst is empty)
+//   CBst* node = NULL;
+//   I4 cmp = CBst_find(&node, SLC("myNode"));
+//   // if   not node    : *node was null (CBst is empty)
 //   // elif cmp == 0    : *node key == "myNode"
 //   // elif cmp < 0     : *node key <  "myNode"
 //   // else cmp > 0     : *node key >  "myNode"
-I4   Bst_find(Bst** node, Slc slc);
+I4   CBst_find(CBst** node, Slc slc);
 
 // Add a node to the tree, modifying *root if the node becomes root.
 //
 // Returns NULL if `add.key` did not exist in the tree. Else returns the
 // existing node (which is no longer in the tree).
-Bst* Bst_add(Bst** root, Bst* add);
+CBst* CBst_add(CBst** root, CBst* add);
 
 // #################################
 // # Error Handling and Testing

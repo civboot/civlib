@@ -1,7 +1,7 @@
 CC=gcc
 FLAGS=-m32 -no-pie -g -rdynamic
 DISABLE_WARNINGS=-Wno-pointer-sign -Wno-format
-FILES=civ/*.c
+FILES=src/*.c tests/*.c
 OUT=bin/tests
 
 all: test
@@ -11,4 +11,4 @@ test: build
 
 build:
 	mkdir -p bin/
-	$(CC) $(FLAGS) -Wall $(DISABLE_WARNINGS) $(FILES) -o $(OUT)
+	$(CC) $(FLAGS) -Isrc/ -Wall $(DISABLE_WARNINGS) $(FILES) -o $(OUT)

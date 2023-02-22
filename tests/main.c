@@ -230,38 +230,38 @@ TEST(dll)
 END_TEST
 
 TEST(bst)
-  Bst a, b, c;
+  CBst a, b, c;
 
-  Bst* node = NULL;
-  Bst_find(&node, SLC("aaa"));
+  CBst* node = NULL;
+  CBst_find(&node, SLC("aaa"));
   assert(NULL == node);
 
   CStr_ntVar(key_a, "\x03", "aaa");
   CStr_ntVar(key_b, "\x04", "abbd");
   CStr_ntVar(key_c, "\x03", "abc");
 
-  a = (Bst) { .key = key_a };
-  b = (Bst) { .key = key_b };
-  c = (Bst) { .key = key_c };
+  a = (CBst) { .key = key_a };
+  b = (CBst) { .key = key_b };
+  c = (CBst) { .key = key_c };
 
   Slc slc_a = Slc_frCStr(key_a);
   Slc slc_b = Slc_frCStr(key_b);
   Slc slc_c = Slc_frCStr(key_c);
 
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_b));    assert(&b == node); // b found
-  node = &b; TASSERT_EQ(-1, Bst_find(&node, slc_a));    assert(&b == node); // not found
-  node = &b; TASSERT_EQ( 1, Bst_find(&node, slc_c));    assert(&b == node); // not found
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found
+  node = &b; TASSERT_EQ(-1, CBst_find(&node, slc_a));    assert(&b == node); // not found
+  node = &b; TASSERT_EQ( 1, CBst_find(&node, slc_c));    assert(&b == node); // not found
 
-  node = NULL; Bst_add(&node, &b); assert(node == &b);
-  node = &b; Bst_add(&node, &a);
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_b));    assert(&b == node); // b found
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_a));    assert(&a == node); // a found
-  node = &b; TASSERT_EQ( 1, Bst_find(&node, slc_c));    assert(&b == node); // not found
+  node = NULL; CBst_add(&node, &b); assert(node == &b);
+  node = &b; CBst_add(&node, &a);
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_a));    assert(&a == node); // a found
+  node = &b; TASSERT_EQ( 1, CBst_find(&node, slc_c));    assert(&b == node); // not found
 
-  node = &b; Bst_add(&node, &c);
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_b));    assert(&b == node); // b found
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_a));    assert(&a == node); // a found
-  node = &b; TASSERT_EQ( 0, Bst_find(&node, slc_c));    assert(&c == node); // c found
+  node = &b; CBst_add(&node, &c);
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_a));    assert(&a == node); // a found
+  node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_c));    assert(&c == node); // c found
 
   TASSERT_EQ(b.l, &a);
   TASSERT_EQ(b.r, &c);

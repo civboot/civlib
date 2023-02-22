@@ -1,6 +1,6 @@
 #include <unistd.h> // read, write, lseek
 
-#include "./civ_unix.h"
+#include "civ_unix.h"
 
 /*extern*/ CivUnix civUnix          = (CivUnix) {};
 
