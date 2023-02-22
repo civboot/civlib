@@ -523,6 +523,42 @@ DEFINE_METHODS(MArena, BBA_mArena,
 
 Arena BBA_asArena(BBA* d) { return (Arena) { .m = BBA_mArena(), .d = d }; }
 
+// #################################
+// # BStkS: an infinitely growable stack that uses blocks to grow/shrink
+
+DllRoot* BStkS_asDll(BStkS* s) { return (DllRoot*)&s->node; }
+
+S  BStk_len(BStkS* s) {
+  BStkSNode* n = s->node; if(not n) return 0;
+  return (BStk_CAP - n->sp) + (BStk_CAP * n->descendants);
+}
+
+S* BStk_topRef(BStkS* s) {
+  BStkSNode* n = s->node;  ASSERT(n, "BStkS_topRef OOB");
+  return &n->dat[n->sp];
+}
+
+BStkSNode* BStk_grow(BStkS* s) {
+  BANode* baNode = BA_alloc(s->ba); if(not baNode) return NULL;
+  Sll_add(
+
+  n->next = s->node; ntmp->sp = BStkS_CAP;
+  n->descendants = s->node ? (s->node.descendants + 1) : 0;
+  s->node = n;
+  return n;
+}
+
+void BStkS_add(BStkS* s, S value) {
+  BStkSNode* n = s->node;
+  if(not n or not n->sp) n = BStk_grow(s);
+  ASSERT(stk->sp, "BStkS_add: BA is OOM");
+  n->dat[-- n->sp] = value;
+}
+
+
+// #################################
+// # File Helpers
+
 void writeAll(Writer w, Slc s) {
   BaseFile* b = Xr(w, asBase);
   while(s.len) {

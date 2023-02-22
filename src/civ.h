@@ -638,6 +638,31 @@ DECLARE_METHOD(S , BBA,maxAlloc); // BBA_maxAlloc
 
 MArena* mBBAGet();
 
+// #################################
+// # BStkS: an infinitely growable stack that uses blocks to grow/shrink
+
+#define _BStk_BLOCK_AVAIL (BLOCK_SIZE - (sizeof(size_t) * 2))
+#define BStk_CAP  (_BStk_BLOCK_AVAIL / sizeof(S))
+
+typedef struct _BStkSNode {
+  struct _BStkSNode* next;
+  struct _BStkSNode* prev;
+  U2 sp;
+  U2 descendants; // count of descendants
+  S dat[_BStk_BLOCK_AVAIL / sizeof(S)];
+} BStkSNode;
+
+typedef struct { BStkSNode* node; BA* ba; BANode* owned; } BStkS;
+
+S       BStkS_len(BStkS* s);
+S*      BStkS_topRef(BStkS* s);
+void    BStkS_add(BStkS* s, S value);
+S       BStkS_pop(BStkS* s);
+
+static inline BStkS  BStkS_alloc(BA* ba)  { return (BStkS) { .ba = ba }; }
+static inline void   BStkS_free(BStkS* s) { BA_freeAll(s->ba, s->owned); }
+static inline Sll*   BStk_asSll(BStkS* b) { return (Sll*) b; }
+
 
 // #################################
 // # Civ Global Environment
