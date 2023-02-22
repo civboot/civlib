@@ -1,7 +1,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "./civ.h"
+#include "civ.h"
 
 /*extern*/ char** ARGV       = NULL;
 /*extern*/ const U1* emptyNt = "";

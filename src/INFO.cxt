@@ -109,7 +109,7 @@ assert(d.a == 8);
 
 It's a fair amount of boilerplate in C, but it is EXTREMELY simple and
 performant. Also, using a role is much easier than defining one, which is good
-since they are used extensively. See civ/civ.h for more documentation.
+since they are used extensively. See civ.h for more documentation.
 
 ["] Since a role is only two pointers, best practice is to take them by value
     (not by pointer). I.e. "myFunction(MyRole role, int arg)"

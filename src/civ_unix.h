@@ -4,7 +4,7 @@
 #include <fcntl.h>  // create, open
 #include <execinfo.h>
 #include <signal.h>
-#include "./civ.h"
+#include "civ.h"
 
 #define TEST_UNIX(NAME, numBlocks) \
   TEST(NAME)                       \
