@@ -60,6 +60,7 @@ extern const U1* emptyNt; // empty null-terminated string
 // ####
 // # Core Structs
 typedef struct { U1*   dat;   U2 len;                    } Slc;
+typedef Slc                                                Str;
 typedef struct { U1*   dat;   U2 len;  U2 cap;           } Buf;
 typedef struct { S*    dat;   U2 len;  U2 cap;           } SBuf;
 typedef struct { U1*   dat;   U2 len;  U2 cap; U2 plc;   } PlcBuf;
