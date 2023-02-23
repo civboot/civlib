@@ -150,6 +150,7 @@ S Stk_top(Stk* stk) {
 }
 
 S* Stk_topRef(Stk* stk) {
+  eprintf("??? Stk_topRef: %u < %u\n", stk->sp, stk->cap);
   ASSERT(stk->sp < stk->cap, "Stk_topRef OOB");
   return &stk->dat[stk->sp];
 }

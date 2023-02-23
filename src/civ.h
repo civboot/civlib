@@ -771,11 +771,12 @@ void File_panicOpen(void* d, Slc, S); // unsuported open
 void File_panic(void* d); // used to panic for unsported method
 void File_noop(void* d);  // used as noop for some file methods
 
-#define F_EOF { BaseFile* b = Xr(f,asBase); \
-  return (File_EOF == b->code) and Ring_isEmpty(&b->ring); }
-static inline bool File_eof(File f) F_EOF
-static inline bool Reader_eof(Reader f) F_EOF
-#undef F_EOF
+static inline bool BaseFile_eof(BaseFile* b) {
+  return (File_EOF == b->code) and Ring_isEmpty(&b->ring);
+}
+
+static inline bool File_eof(File f)     { return BaseFile_eof(Xr(f,asBase)); }
+static inline bool Reader_eof(Reader f) { return BaseFile_eof(Xr(f,asBase)); }
 
 // #################################
 // # BufFile
@@ -787,6 +788,8 @@ typedef struct {
   U2        code;
   PlcBuf    b;
 } BufFile;
+
+MFile* BufFile_mFile();
 
 static inline BufFile BufFile_init(Ring r, Buf b) {
   return (BufFile) {
