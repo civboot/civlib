@@ -19,7 +19,9 @@
   _sa.sa_handler = HANDLE_SIG; \
   sigemptyset(&_sa.sa_mask);   \
   _sa.sa_flags = SA_RESTART;   \
-  sigaction(SIGSEGV, &_sa, NULL);
+  sigaction(SIGSEGV, &_sa, NULL); \
+  sigaction(SIGFPE, &_sa, NULL);
+
   /* ... add your own signals */
 
 
