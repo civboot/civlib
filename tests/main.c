@@ -249,14 +249,14 @@ TEST(bst)
   Slc slc_c = Slc_frCStr(key_c);
 
   node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found
-  node = &b; TASSERT_EQ(-1, CBst_find(&node, slc_a));    assert(&b == node); // not found
-  node = &b; TASSERT_EQ( 1, CBst_find(&node, slc_c));    assert(&b == node); // not found
+  node = &b; TASSERT_EQ( 1, CBst_find(&node, slc_a));    assert(&b == node); // not found
+  node = &b; TASSERT_EQ(-1, CBst_find(&node, slc_c));    assert(&b == node); // not found
 
   node = NULL; CBst_add(&node, &b); assert(node == &b);
   node = &b; CBst_add(&node, &a);
   node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found
   node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_a));    assert(&a == node); // a found
-  node = &b; TASSERT_EQ( 1, CBst_find(&node, slc_c));    assert(&b == node); // not found
+  node = &b; TASSERT_EQ(-1, CBst_find(&node, slc_c));    assert(&b == node); // not found
 
   node = &b; CBst_add(&node, &c);
   node = &b; TASSERT_EQ( 0, CBst_find(&node, slc_b));    assert(&b == node); // b found

@@ -356,25 +356,17 @@ Dll* DllRoot_pop(DllRoot* root) {
 
 // Find slice in CBst, starting at `*node`. Set result to `*node`
 // Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
-//
-// This can be used like this:
-//   CBst* node = NULL;
-//   I4 cmp = CBst_find(&node, SLC("myNode"));
-//   // if   not node    : *node was null (CBst is empty)
-//   // elif cmp == 0    : *node key == "myNode"
-//   // elif cmp < 0     : *node key <  "myNode"
-//   // else cmp > 0     : *node key >  "myNode"
 I4 CBst_find(CBst** node, Slc slc) {
   if(!*node) return 0;
   while(true) {
-    I4 cmp = Slc_cmp(slc, Slc_frCStr((*node)->key));
+    I4 cmp = Slc_cmp(Slc_frCStr((*node)->key), slc);
     if(cmp == 0) return 0; // found exact match
-    if(cmp < 0) {
-      if((*node)->l)  *node = (*node)->l; // search left
-      else            return cmp; // not found
-    } else /* cmp > 0 */ {
-      if((*node)->r)  *node = (*node)->r; // search right
-      else            return cmp; // not found
+    if(cmp < 0) { // key is larger, search right
+      if((*node)->r)  *node = (*node)->r;
+      else            return cmp; // not found, key is larger
+    } else { // key is smaller, search left
+      if((*node)->l)  *node = (*node)->l;
+      else            return cmp; // not found, key is smaller
     }
   }
 }
@@ -382,7 +374,7 @@ I4 CBst_find(CBst** node, Slc slc) {
 // Add a node to the tree, modifying *root if the node becomes root.
 //
 // Returns NULL if `add.key` does not exist in the tree. Else returns the
-// existing node.
+// existing node. The tree is not changed if the node already exists.
 //
 // WARNING: this does not modify add.left or add.right.
 CBst* CBst_add(CBst** root, CBst* add) {
@@ -390,8 +382,8 @@ CBst* CBst_add(CBst** root, CBst* add) {
   CBst* node = *root; // prevent modification to root
   I4 cmp = CBst_find(&node, Slc_frCStr(add->key));
   if(cmp == 0) return node;
-  if(cmp < 0) node->l = add;
-  else        node->r = add;
+  if(cmp < 0) node->r = add; // key is larger
+  else        node->l = add; // key is smaller
   add->l = 0, add->r = 0;
   return NULL;
 }
