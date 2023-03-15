@@ -354,19 +354,17 @@ Dll* DllRoot_pop(DllRoot* root) {
 // #################################
 // # Binary Search Tree with CStr key
 
-// Find slice in CBst, starting at `*node`. Set result to `*node`
-// Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
-I4 CBst_find(CBst** node, Slc slc) {
+I4   Bst_find(Bst** node, void* key, BstCmp cmp) {
   if(!*node) return 0;
   while(true) {
-    I4 cmp = Slc_cmp(Slc_frCStr((*node)->key), slc);
-    if(cmp == 0) return 0; // found exact match
-    if(cmp < 0) { // key is larger, search right
+    I4 c = cmp(*node, key);
+    if(c == 0) return 0; // found exact match
+    if(c < 0) { // key is larger than node, search right
       if((*node)->r)  *node = (*node)->r;
-      else            return cmp; // not found, key is larger
-    } else { // key is smaller, search left
-      if((*node)->l)  *node = (*node)->l;
-      else            return cmp; // not found, key is smaller
+      else            return c; // not found
+    } else {     // key is smaller than node, search left
+      if((*node)->l)  *node = (*node)->l; // search left
+      else            return c; // not found
     }
   }
 }
@@ -377,15 +375,28 @@ I4 CBst_find(CBst** node, Slc slc) {
 // existing node. The tree is not changed if the node already exists.
 //
 // WARNING: this does not modify add.left or add.right.
-CBst* CBst_add(CBst** root, CBst* add) {
+Bst* Bst_add(Bst** root, Bst* add, void* addKey, BstCmp cmp) {
   if(!*root) { *root = add; return NULL; } // new root
-  CBst* node = *root; // prevent modification to root
-  I4 cmp = CBst_find(&node, Slc_frCStr(add->key));
-  if(cmp == 0) return node;
-  if(cmp < 0) node->r = add; // key is larger
-  else        node->l = add; // key is smaller
+  Bst* node = *root; // prevent modification to root
+  I4 c = Bst_find(&node, addKey, cmp);
+  if(c == 0) return node;
+  if(c < 0) node->r = add; // key is larger
+  else      node->l = add; // key is smaller
   add->l = 0, add->r = 0;
   return NULL;
+}
+
+I4 CBst_cmp(CBst* node, Slc* key) { return Slc_cmp(Slc_frCStr(node->key), *key); }
+
+// Find slice in CBst, starting at `*node`. Set result to `*node`
+// Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
+I4 CBst_find(CBst** node, Slc slc) {
+  return Bst_find((Bst**)node, &slc, (BstCmp)&CBst_cmp);
+}
+
+CBst* CBst_add(CBst** root, CBst* add) {
+  Slc key = Slc_frCStr(add->key);
+  return (CBst*) Bst_add((Bst**)root, (Bst*)add, &key, (BstCmp)&CBst_cmp);
 }
 
 // #################################

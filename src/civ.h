@@ -383,27 +383,33 @@ Dll* DllRoot_pop(DllRoot* root);
 
 // #################################
 // # Binary Search Tree
+typedef struct _Bst { struct _Bst* l; struct _Bst* r; } Bst;
+
+// BstCmp is a function pointer for comparing keys of sub-classes of Bst.
+// This allows implementing the key logic for abitrary Bst's more easily.
+//
+// Should return: 0 iff node.key = key
+//               -1 iff node.key < key
+//                1 iff node.key > key
+typedef I4  (*BstCmp)(Bst* node, void* key);
+
+// Find slice in Bst, starting at `*node`. Set result to `*node`
+// Else, the return value is the result of `cmp(node, key)`
+I4   Bst_find(Bst** node, void* key, BstCmp cmp);
+
+// Add a node to the tree, modifying *root if the node becomes root.
+//
+// Returns NULL if `add`'s key did not exist in the tree. Else returns the
+// existing node (which is no longer in the tree).
+Bst* Bst_add(Bst** root, Bst* add, void* addKey, BstCmp cmp);
+
+// CBst: Bst using a CStr as the key
+// Implemented using Bst functions above.
 typedef struct _CBst {
   struct _CBst* l; struct _CBst* r;
   CStr* key;
 } CBst;
-
-// Find slice in CBst, starting at `*node`. Set result to `*node`
-// Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
-//
-// This can be used like this:
-//   CBst* node = NULL;
-//   I4 cmp = CBst_find(&node, SLC("myNode"));
-//   // if   not node    : *node was null (CBst is empty)
-//   // elif cmp == 0    : *node key == "myNode"
-//   // elif cmp < 0     : *node key <  "myNode"
-//   // else cmp > 0     : *node key >  "myNode"
 I4   CBst_find(CBst** node, Slc slc);
-
-// Add a node to the tree, modifying *root if the node becomes root.
-//
-// Returns NULL if `add.key` did not exist in the tree. Else returns the
-// existing node (which is no longer in the tree).
 CBst* CBst_add(CBst** root, CBst* add);
 
 // #################################
