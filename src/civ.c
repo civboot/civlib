@@ -9,6 +9,12 @@
 /*extern*/ U2 civErr         = 0;
 /*extern*/ Civ civ           = (Civ) {0};
 
+I4 S_cmp(S l, S r) {
+  if(l < r) return -1;
+  if(l > r) return 1;
+  else      return 0;
+}
+
 void Civ_init(Fiber* fb) {
   civ = (Civ) {.fb = fb};
 }
@@ -388,8 +394,6 @@ Bst* Bst_add(Bst** root, Bst* add, void* addKey, BstCmp cmp) {
 
 I4 CBst_cmp(CBst* node, Slc* key) { return Slc_cmp(Slc_frCStr(node->key), *key); }
 
-// Find slice in CBst, starting at `*node`. Set result to `*node`
-// Else, the return value is the result of `Slc_cmp(node.ckey, slc)`
 I4 CBst_find(CBst** node, Slc slc) {
   return Bst_find((Bst**)node, &slc, (BstCmp)&CBst_cmp);
 }

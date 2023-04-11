@@ -57,6 +57,8 @@ typedef I8                   ISlot;
 
 extern const U1* emptyNt; // empty null-terminated string
 
+I4 S_cmp(S l, S r);
+
 // ####
 // # Core Structs
 typedef struct { U1*   dat;   U2 len;                    } Slc;
@@ -409,7 +411,8 @@ typedef struct _CBst {
   struct _CBst* l; struct _CBst* r;
   CStr* key;
 } CBst;
-I4   CBst_find(CBst** node, Slc slc);
+I4    CBst_cmp(CBst* node, Slc* key);
+I4    CBst_find(CBst** node, Slc slc);
 CBst* CBst_add(CBst** root, CBst* add);
 
 // #################################
