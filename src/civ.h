@@ -397,6 +397,8 @@ typedef I4  (*BstCmp)(Bst* node, void* key);
 
 // Find slice in Bst, starting at `*node`. Set result to `*node`
 // Else, the return value is the result of `cmp(node, key)`
+//
+// Returns 0 if *node is NULL
 I4   Bst_find(Bst** node, void* key, BstCmp cmp);
 
 // Add a node to the tree, modifying *root if the node becomes root.
