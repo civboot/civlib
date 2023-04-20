@@ -111,6 +111,13 @@ void Buf_extendNt(Buf* b, U1* s) {
   return Buf_extend(b, Slc_frNt(s));
 }
 
+Slc* Buf_freeEnd(Buf* b, Arena a) {
+  U2 sz = b->cap - b->len;  if(not sz) return NULL;
+  Slc* out = Xr(a,free, b->dat + b->len, sz, 1);
+  if(not out) b->cap = b->len;
+  return out;
+}
+
 #define _slc(TY) { \
   ASSERT(end >= start, #TY "_slc end < start"); \
   ASSERT(end <= d->len, #TY "_slc OOB"); \

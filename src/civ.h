@@ -591,6 +591,8 @@ static inline bool Buf_free(Buf* b, Arena a) {
   return Xr(a,free, b->dat, b->cap, 1);
 }
 
+Slc* Buf_freeEnd(Buf* b, Arena a);
+
 static inline PlcBuf PlcBuf_new(Arena arena, U2 cap) {
   return (PlcBuf) { .dat = Xr(arena, alloc, cap, 1), .cap = cap };
 }
