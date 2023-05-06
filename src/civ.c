@@ -481,6 +481,7 @@ static Block* _allocBlockIfRequired(BBA* bba, S grow) {
 
 DEFINE_METHOD(void*, BBA,alloc, S sz, U2 alignment) {
   ASSERT(sz <= BLOCK_AVAIL, "allocation sz too large");
+  ASSERT(this->ba, "BBA has no ba");
   if(1 == alignment) {
     // Grow up
     Block* b = _allocBlockIfRequired(this, sz);
