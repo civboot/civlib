@@ -24,6 +24,9 @@
 #define RSIZE   8
 #endif
 
+#define ROLE_METH_OFFSET 0
+#define ROLE_DATA_OFFSET RSIZE
+
 #define ALIGN1      1
 #define ALIGN_SLOT  RSIZE
 
