@@ -292,6 +292,14 @@ Sll* Sll_reverse(Sll* node) {
   return prev;
 }
 
+Sll* Sll_last(Sll* node) {
+  while(node) {
+    if(not node->next) return node;
+    node = node->next;
+  }
+  return NULL;
+}
+
 Slc* Sll_free(Sll* node, U2 nodeSz, Arena a) {
   while(node) {
     Sll* next = node->next;
@@ -301,6 +309,7 @@ Slc* Sll_free(Sll* node, U2 nodeSz, Arena a) {
   }
   return NULL;
 }
+
 
 // ##
 // # Dll
@@ -382,6 +391,12 @@ I4   Bst_find(Bst** node, void* key, BstCmp cmp) {
   }
 }
 
+Bst*   Bst_get(Bst* root, void* key, BstCmp cmp) {
+  I4 c = Bst_find(&root, key, cmp);
+  if(root and not c) return root;
+  else               return NULL;
+}
+
 // Add a node to the tree, modifying *root if the node becomes root.
 //
 // Returns NULL if `add.key` does not exist in the tree. Else returns the
@@ -403,6 +418,10 @@ I4 CBst_cmp(CBst* node, Slc* key) { return Slc_cmp(Slc_frCStr(node->key), *key);
 
 I4 CBst_find(CBst** node, Slc slc) {
   return Bst_find((Bst**)node, &slc, (BstCmp)&CBst_cmp);
+}
+
+CBst* CBst_get(CBst* root, Slc slc) {
+  return (CBst*) Bst_get((Bst*)root, &slc, (BstCmp)&CBst_cmp);
 }
 
 CBst* CBst_add(CBst** root, CBst* add) {

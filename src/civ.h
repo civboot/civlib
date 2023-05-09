@@ -357,6 +357,9 @@ S    Sll_len(Sll* node);
 // Reverse the linked list, returning the new start.
 Sll* Sll_reverse(Sll* node);
 
+// Get the last item in Sll
+Sll* Sll_last(Sll* node);
+
 // #################################
 // # Dll: Doubly Linked List
 
@@ -401,6 +404,9 @@ typedef I4  (*BstCmp)(Bst* node, void* key);
 // Returns 0 if *node is NULL
 I4   Bst_find(Bst** node, void* key, BstCmp cmp);
 
+// Get the node from root or NULL if it doesn't exist.
+Bst* Bst_get(Bst* root, void* key, BstCmp cmp);
+
 // Add a node to the tree, modifying *root if the node becomes root.
 //
 // Returns NULL if `add`'s key did not exist in the tree. Else returns the
@@ -415,6 +421,7 @@ typedef struct _CBst {
 } CBst;
 I4    CBst_cmp(CBst* node, Slc* key);
 I4    CBst_find(CBst** node, Slc slc);
+CBst* CBst_get(CBst* root, Slc slc);
 CBst* CBst_add(CBst** root, CBst* add);
 
 // #################################
@@ -576,7 +583,7 @@ typedef struct {
 } MArena;
 
 
-typedef struct { const MArena* m; void* d; } Arena;
+typedef struct { void* d; const MArena* m; } Arena;
 
 // Methods that depend on arena
 Slc* Sll_free(Sll* node, U2 nodeSz, Arena a);
@@ -618,7 +625,7 @@ typedef struct {
   Sll* (*resourceLL)       (void* d);
 } MResource;
 
-typedef struct { const MResource* m; void* d; } Resource;
+typedef struct { void* d; const MResource* m; } Resource;
 static inline Resource* Arena_asResource(Arena* a) { return (Resource*) a; }
 
 // #################################
@@ -736,13 +743,13 @@ typedef struct {
   void      (*write)(void* d);
 } MFile;
 
-typedef struct { const MFile* m; void* d; } File;  // Role
+typedef struct { void* d; const MFile* m; } File;  // Role
 
 typedef struct {
   void          (*read)   (void* d);
   BaseFile*     (*asBase) (void* d);
 } MReader;
-typedef struct { const MReader* m; void* d; } Reader;
+typedef struct { void* d; const MReader* m; } Reader;
 static inline Reader File_asReader(File f) {
   return (Reader) { .m = (MReader*) &f.m->read, .d = f.d };
 }
@@ -751,7 +758,7 @@ typedef struct {
   BaseFile* (*asBase) (void* d);
   void      (*write)  (void* d);
 } MWriter;
-typedef struct { const MWriter* m; void* d; } Writer;
+typedef struct { void* d; const MWriter* m; } Writer;
 static inline Writer File_asWriter(File f) {
   return (Writer) { .m = (MWriter*) &f.m->asBase, .d = f.d };
 }
