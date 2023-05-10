@@ -33,8 +33,8 @@ TEST(basic)
   TASSERT_EQ(0x7,  bitClr(0x1F, 0x18));
   TASSERT_EQ(0x19, bitSet(0x1F, 1, 7));
 
-  EXPECT_ERR(SET_ERR(SLC("expected 1")));
-  EXPECT_ERR(SET_ERR(SLC("expected 2")));
+  EXPECT_ERR(SET_ERR(SLC("expected 1")), " 1");
+  EXPECT_ERR(SET_ERR(SLC("expected 2")), " 2");
 END_TEST
 
 TEST(slc)
@@ -51,6 +51,12 @@ TEST(slc)
 
   Slc c0 = SLC("abc");
   TASSERT_EQ(0, Slc_cmp(c, c0));
+
+  TASSERT_EQ(0, Slc_find(SLC("121412"), SLC("12")));
+  TASSERT_EQ(6, Slc_find(SLC("121412"), SLC("45")));
+  TASSERT_EQ(2, Slc_find(SLC("  abc"),  SLC("abc")));
+  TASSERT_EQ(6, Slc_find(SLC("  dabc"), SLC("abcd")));
+
 END_TEST
 
 TEST(buf)
@@ -82,12 +88,12 @@ TEST(stk)
   S dat[3];
   Stk s = Stk_init(dat, 3);
   TASSERT_EQ((S*)dat, s.dat); TASSERT_EQ(3, s.sp); TASSERT_EQ(3, s.cap);
-  EXPECT_ERR(Stk_pop(&s));
+  EXPECT_ERR(Stk_pop(&s), "Stk underflow");
   Stk_add(&s, 3);
   TASSERT_EQ(3, dat[2]); TASSERT_EQ(2, s.sp);
   TASSERT_EQ(3, Stk_pop(&s));
   Stk_add3(&s, 1, 2, 42);
-  EXPECT_ERR(Stk_add(&s, 0xFF));
+  EXPECT_ERR(Stk_add(&s, 0xFF), "Stk overflow");
   TASSERT_STK(42, &s); TASSERT_STK(2, &s); TASSERT_STK(1, &s);
   S a = 0, b = 0, c = 0;
   Stk_add3(&s, 4, 5, 99); Stk_pop3(&s, a, b, c);
@@ -136,7 +142,7 @@ TEST(ring)
   TASSERT_EQ(1, avail.len); assert(dat + 9 == avail.dat);
 
   // Cannot add len 3
-  EXPECT_ERR( Ring_extend(&r, SLC("WXY")) );
+  EXPECT_ERR(Ring_extend(&r, SLC("WXY")), "too full");
   TASSERT_EQ(8, Ring_len(&r));
 
   // Fill up
@@ -335,7 +341,8 @@ TEST(bufFile)
   Ring_clear(r);
   BufFile_read(&f); TASSERT_EQ(0, Ring_cmpSlc(r, SLC(" technology.")));
   TASSERT_EQ(File_EOF, f.code);
-  EXPECT_ERR(BufFile_read(&f));
+  EXPECT_ERR(BufFile_read(&f), "after EOF");
+  EXPECT_ERR(BufFile_read(&f), "after EOF");
 END_TEST
 
 TEST(fileRead)
@@ -391,6 +398,7 @@ TEST(fileWrite)
   UFile_read(&f); TASSERT_EQ(f.code, File_DONE);
   TASSERT_EQ(0, Ring_cmpSlc(r, SLC("hello there! My nam")));
   UFile_close(&f);
+  EXPECT_ERR(UFile_write(&f), "operation out of order");
 END_TEST
 
 int main(int argc, char *argv[]) {

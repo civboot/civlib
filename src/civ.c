@@ -24,6 +24,16 @@ void runErrPrinter() {
   else               defaultErrPrinter();
 }
 
+void handleExpectedErr(Slc expect) {
+  civ.fb->state &= ~Fiber_EXPECT_ERR;
+  if(civ.fb->err.len == Slc_find(civ.fb->err, expect)) {
+    eprintf("!!! Expected: %.*s\n", Dat_fmt(expect));
+    eprintf("!!!      got: %.*s\n", Dat_fmt(civ.fb->err));
+    ASSERT(false, "expected error didn't match, see stderr");
+  }
+}
+
+
 // ####
 // # Core methods
 
@@ -70,6 +80,21 @@ I4 Slc_cmp(Slc l, Slc r) { // return -1 if l<r, 1 if l>r, 0 if eq
   if(l.len < r.len) return -1;
   if(l.len > r.len) return 1;
   return 0;
+}
+
+// A simple and naive implementation. Not performant.
+U2 Slc_find(Slc haystack, Slc needle) {
+  if(not needle.len) return 0;
+  for(S h = 0; h < haystack.len;) {
+begin:
+    if(haystack.len - h < needle.len) return haystack.len;
+    for(S n = 0; n < needle.len; n++) {
+      if(needle.dat[n] != haystack.dat[h + n])
+        { h++; goto begin; }
+    }
+    return h;
+  }
+  return haystack.len;
 }
 
 U2 Slc_move(Slc to, Slc from) {
@@ -584,10 +609,10 @@ U1* Reader_get(Reader f, U2 i) {
   Ring* r = &b->ring;
   if(i < Ring_len(r)) return &r->dat[(r->head + i) % r->_cap];
   ASSERT(i < Ring_cap(r), "index larger than Ring");
-  do {
+  while(b->code <= File_DONE) {
     Xr(f, read);
     if(i < Ring_len(r)) return &r->dat[(r->head + i) % r->_cap];
-  } while(b->code <= File_DONE);
+  }
   return NULL;
 }
 
@@ -618,7 +643,8 @@ DEFINE_METHOD(void      , BufFile,seek, ISlot offset, U1 whence) {
 }
 
 DEFINE_METHOD(void      , BufFile,read) {
-  ASSERT(this->code == File_READING || this->code >= File_DONE, "File operation out of order");
+  ASSERT(this->code == File_READING || this->code >= File_DONE, "read operation out of order");
+  ASSERT(this->code != File_EOF, "File read after EOF");
   Ring* r = &this->ring;
   PlcBuf* b = &this->b;
   Slc avail = Ring_avail(r);
@@ -636,7 +662,7 @@ DEFINE_METHOD(BaseFile* , BufFile,asBase) {
 }
 
 DEFINE_METHOD(void      , BufFile,write) {
-  ASSERT(this->code == File_WRITING || this->code >= File_DONE, "File operation out of order");
+  ASSERT(this->code == File_WRITING || this->code >= File_DONE, "write operation out of order");
   this->code = File_WRITING;
   Ring* r = &this->ring; PlcBuf* b = &this->b;
   Slc s = Ring_1st(r);

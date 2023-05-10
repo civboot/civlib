@@ -24,8 +24,9 @@
 #define RSIZE   8
 #endif
 
-#define ROLE_METH_OFFSET 0
-#define ROLE_DATA_OFFSET RSIZE
+// Role { Data* d; Methods* m; }
+#define ROLE_DATA_OFFSET 0
+#define ROLE_METH_OFFSET RSIZE
 
 #define ALIGN1      1
 #define ALIGN_SLOT  RSIZE
@@ -171,6 +172,7 @@ Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
 #define Slc_eq(A, B)   (0 == Slc_cmp(A, B))
+U2 Slc_find(Slc haystack, Slc needle);
 
 
 // Perform 'to = from'. Return the number of bytes moved.
@@ -488,13 +490,15 @@ CBst* CBst_add(CBst** root, CBst* add);
   } else { CODE; }
 
 
+void handleExpectedErr(Slc expect);
 
 // Execute CODE and expect an error longjmp
-#define EXPECT_ERR(CODE)                  \
+#define EXPECT_ERR(CODE, MSG)                  \
   civ.fb->state |= Fiber_EXPECT_ERR;      \
   HANDLE_ERR(                             \
-    { CODE; ASSERT(false, "expected error never happend"); } \
-    , civ.fb->state &= ~Fiber_EXPECT_ERR)
+    { CODE; \
+      eprintf("!!! expected error never happend\n"); assert(false); } \
+    , { handleExpectedErr(SLC(MSG)); })
 
 // #################################
 // # Methods and Roles

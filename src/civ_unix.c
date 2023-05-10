@@ -124,8 +124,8 @@ DEFINE_METHOD(Sll*, UFile,resourceLL) {
 DEFINE_METHOD(BaseFile*, UFile,asBase) { return (BaseFile*) this; }
 
 DEFINE_METHOD(void, UFile,open, Slc path, S options) {
-  assert(this->code == File_CLOSED);
-  assert(path.len < 255);
+  ASSERT(this->code == File_CLOSED, "open on non-closed file");
+  ASSERT(path.len < 255, "UFile path len >= 255");
   uint8_t pathname[256];
   memcpy(pathname, path.dat, path.len);
   pathname[path.len] = 0;
@@ -136,7 +136,7 @@ DEFINE_METHOD(void, UFile,open, Slc path, S options) {
 }
 
 DEFINE_METHOD(void, UFile,close) {
-  assert(this->code >= File_DONE);
+  ASSERT(this->code >= File_DONE, "close non-done file");
   if(close(this->fid)) this->code = File_ERROR;
   else                 this->code = File_CLOSED;
 }
@@ -147,12 +147,13 @@ DEFINE_METHOD(void, UFile,stop) {
 }
 
 DEFINE_METHOD(void, UFile,seek, ISlot offset, U1 whence) {
-  assert(this->code >= File_DONE);
+  ASSERT(this->code >= File_DONE, "seek non-done file");
   UFile_handleErr(this, lseek(this->fid, offset, whence));
 }
 
 DEFINE_METHOD(void, UFile,read) {
-  assert(this->code == File_READING || this->code >= File_DONE);
+  ASSERT(this->code == File_READING || this->code >= File_DONE, "read operation out of order");
+  ASSERT(this->code != File_EOF, "File read after EOF");
   int len = 0;
   Ring* r = &this->ring;
   this->code = File_READING;
@@ -168,7 +169,7 @@ DEFINE_METHOD(void, UFile,read) {
 }
 
 DEFINE_METHOD(void, UFile,write) {
-  assert(this->code == File_WRITING || this->code >= File_DONE);
+  ASSERT(this->code == File_READING || this->code >= File_DONE, "write operation out of order");
   this->code = File_WRITING;
   Ring* r = &this->ring;
   Slc first = Ring_1st(r);
