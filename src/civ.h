@@ -168,12 +168,16 @@ static inline U4 U4_ceil(U4 a, U4 b) { return (a / b) + (a % b != 0); }
 // #################################
 // # Slc: data slice of up to 64KiB indexes (0x10,000)
 // Slice is just a data pointer and a len.
+static inline Slc Slc_ntLit(U1* s) {
+  if(not s) return (Slc) { .dat = NULL };
+  return (Slc) { .dat = s, .len = strlen(s) };
+}
+
 Slc  Slc_frNt(U1* s); // from null-terminated str
 Slc  Slc_frCStr(CStr* c);
 I4   Slc_cmp(Slc a, Slc b);
 #define Slc_eq(A, B)   (0 == Slc_cmp(A, B))
 U2 Slc_find(Slc haystack, Slc needle);
-
 
 // Perform 'to = from'. Return the number of bytes moved.
 // This will always move the most bytes it can (attempting to fill 'to').
@@ -334,10 +338,7 @@ static inline Slc CStr_asSlcMaybe(CStr* c) {
   static CStr_ntLitUnchecked(NAME, LEN, STR); \
   assert(CStr_varAssert(__LINE__, STR, LEN));
 
-static inline Slc Slc_ntLit(U1* s) {
-  if(not s) return (Slc) { .dat = NULL };
-  return (Slc) { .dat = s, .len = strlen(s) };
-}
+static inline I4 CStr_cmpSlc(CStr* c, Slc s) { return Slc_cmp(CStr_asSlc(c), s); }
 
 static inline bool CStr_varAssert(U4 line, U1* str, U1* len) {
   if(1 != strlen(len)) {
@@ -584,8 +585,8 @@ void BA_freeArray(BA* ba, S len, BANode nodes[], Block blocks[]);
 // # Arena Role
 typedef struct {
   void  (*drop)            (void* d);
-  void* (*alloc)           (void* d, S sz, U2 alignment);
   Slc*  (*free)            (void* d, void* dat, S sz, U2 alignment);
+  void* (*alloc)           (void* d, S sz, U2 alignment);
   S  (*maxAlloc)        (void* d);
 } MArena;
 

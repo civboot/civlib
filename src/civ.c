@@ -575,8 +575,8 @@ DEFINE_METHOD(S, BBA,maxAlloc) { return BLOCK_AVAIL; }
 
 DEFINE_METHODS(MArena, BBA_mArena,
   .drop      = M_BBA_drop,
-  .alloc     = M_BBA_alloc,
   .free      = M_BBA_free,
+  .alloc     = M_BBA_alloc,
   .maxAlloc  = M_BBA_maxAlloc,
 )
 
