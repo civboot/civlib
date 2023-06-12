@@ -78,15 +78,25 @@ void CivUnix_allocBlocks(S numBlocks) {
 
 void CivUnix_init(S numBlocks) {
   CivUnix_allocBlocks(numBlocks);
+  civUnix.logFile = UFile_new(Ring_init(civUnix.logBuf, STDOUT_BUF));
+  civUnix.outFile = UFile_new(Ring_init(civUnix.outBuf, STDOUT_BUF));
+  civUnix.logFile.fid = fileno(stderr); civUnix.outFile.fid = fileno(stdout);
+  civUnix.logFile.code = File_DONE;     civUnix.outFile.code = File_DONE;
+  civUnix.logBBA = BBA_new();
+  civUnix.log = FileLogger_init(
+      BBA_asArena(&civUnix.logBBA),
+      UFile_asFile(&civUnix.logFile),
+      civ.logLvl);
+  civ.logFile = UFile_asFile(&civUnix.logFile);
+  civ.outFile = UFile_asFile(&civUnix.outFile);
+  civ.log     = FileLogger_asLogger(&civUnix.log);
 }
-
 
 void CivUnix_drop() {
   for(Dll* dll; (dll = DllRoot_pop(&civUnix.mallocs));) free(dll->dat);
   assert(NULL == civUnix.mallocs.start);
   civ.ba = (BA) {0};
 }
-
 
 // #################################
 // # File
@@ -187,6 +197,16 @@ void UFile_readAll(UFile* f) {
   do { UFile_read(f); } while (f->code < File_DONE);
 }
 
+void UFile_extend(UFile* f, Slc s) {
+  Ring* r = &f->ring;
+  for(S i = 0; i < s.len;) {
+    U2 n = S_min(Ring_remain(r), s.len - i);
+    Ring_extend(r, (Slc){ .dat = &s.dat[i], .len=n });
+    i += n;
+    UFile_write(f); ASSERT(f->code <= File_DONE, "IO Error");
+  }
+}
+
 DEFINE_METHODS(MFile, UFile_mFile,
   .drop       = M_UFile_drop,
   .resourceLL = M_UFile_resourceLL,
@@ -202,3 +222,4 @@ DEFINE_METHODS(MFile, UFile_mFile,
 File UFile_asFile(UFile* d) {
   return (File) { .m = UFile_mFile(), .d = d };
 }
+

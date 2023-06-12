@@ -320,7 +320,8 @@ TEST_UNIX(CStr, 2)
 END_TEST_UNIX
 
 TEST(bufFile)
-  BufFile_var(f, 16, "Civboot is the foundation of a simpler technology.");
+  { // reading
+  BufFile_varNt(f, 16, "Civboot is the foundation of a simpler technology.");
   Ring* r = &f.ring;
 
   TASSERT_EQ(50, f.b.len);
@@ -343,6 +344,22 @@ TEST(bufFile)
   TASSERT_EQ(File_EOF, f.code);
   EXPECT_ERR(BufFile_read(&f), "after EOF");
   EXPECT_ERR(BufFile_read(&f), "after EOF");
+  } // end reading
+
+  // Test writing
+  BufFile_var(fw, 15, 256);
+  Ring* rw = &fw.ring;
+  Buf* bw = PlcBuf_asBuf(&fw.b);
+  Slc* sw = Buf_asSlc(bw);
+  Ring_extend(rw, SLC("Hello "));
+  BufFile_write(&fw);
+  TASSERT_EQ(File_DONE, fw.code);
+  TASSERT_EQ(0, Ring_cmpSlc(rw, SLC("")));
+  TASSERT_SLC_EQ("Hello ", *sw);
+  File f = BufFile_asFile(&fw);
+  File_extend(f, SLC("World!")); File_flush(f);
+  TASSERT_SLC_EQ("Hello World!", *sw);
+
 END_TEST
 
 TEST(fileRead)
@@ -401,6 +418,31 @@ TEST(fileWrite)
   EXPECT_ERR(UFile_write(&f), "operation out of order");
 END_TEST
 
+TEST_UNIX(log, 5)
+  BBA bba = {.ba = &civ.ba}; Arena a = BBA_asArena(&bba);
+  BufFile_var(f, 15, 256);
+  FileLogger* fl = FileLogger_new(a, BufFile_asFile(&f));
+  FileLogger_start(fl, LOG_INFO);
+  FileLogger_end(fl);
+  TASSERT_SLC_EQ("[INFO] \n", *PlcBuf_asSlc(&f.b));
+
+  Buf_clear(PlcBuf_asBuf(&f.b));
+  Logger l = FileLogger_asLogger(fl);
+  #define MSG "the ooobloo is in the poodloo"
+  Xr(l,start, LOG_WARN); Xr(l,add, SLC(MSG)); Xr(l,end);
+  TASSERT_SLC_EQ("[WARN] " MSG "\n", *PlcBuf_asSlc(&f.b));
+  #undef MSG
+
+  UFile_extend(&civUnix.logFile, SLC("* civUnix.logFile write works\n"));
+  File_extend(civ.logFile,       SLC("* civ.logFile     write works\n"));
+  File_flush(civ.logFile);
+  assert(Xr(civ.log,start, LOG_INFO));
+  Xr(civ.log,add, SLC("log.add"));
+  Writer_extend(Logger_asWriter(civ.log), SLC(" and log.asWriter works"));
+  Xr(civ.log,end);
+
+END_TEST
+
 int main(int argc, char *argv[]) {
   ARGV = argv;
   SETUP_SIG((void *)defaultHandleSig);
@@ -421,6 +463,7 @@ int main(int argc, char *argv[]) {
   test_bufFile();
   test_fileRead();
   test_fileWrite();
+  test_log();
   eprintf("# Tests All Pass\n");
   return 0;
 }

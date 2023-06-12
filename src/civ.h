@@ -284,9 +284,15 @@ static inline void Ring_clear(Ring* r) { r->head = 0; r->tail = 0; }
 U1*  Ring_next(Ring* r);
 
 // Warning: Panics if length not sufficient
-U1     Ring_pop(Ring* r); 
+U1     Ring_pop(Ring* r);
 void   Ring_push(Ring* r, U1 c);
 void   Ring_extend(Ring* r, Slc s);
+
+// Move as much data as possible into ring. Return the amount moved.
+U2     Ring_move(Ring* r, Slc s);
+
+// Move as much data as possible out of ring. Return the amount moved.
+U2     Ring_consume(Ring* r, Buf* b);
 
 // This API is for:
 // 1. Get an available contiguous slice of memory and store some data in it.
@@ -439,7 +445,7 @@ CBst* CBst_add(CBst** root, CBst* add);
     jmp_buf localErrJmp;                   \
     Fiber fb;                              \
     Fiber_init(&fb, &localErrJmp);         \
-    Civ_init(&fb);                         \
+    Civ_init(&fb, LOG_SET_TRACE);          \
     eprintf("## Testing " #NAME "...\n");  \
     if(setjmp(localErrJmp)) {              \
       eprintf("!! test failed with error !!\n"); \
@@ -651,6 +657,7 @@ static inline Resource* Arena_asResource(Arena* a) { return (Resource*) a; }
 // unaligned allocations always grow from top to bottom.
 
 typedef struct { BA* ba; BANode* dat; } BBA;
+#define BBA_new() (BBA) { .ba = &civ.ba }
 
 DllRoot* BBA_asDllRoot(BBA* bba);
 Arena    BBA_asArena(BBA* b);
@@ -681,25 +688,6 @@ typedef struct _Fiber {
   jmp_buf*   errJmp;
   Slc err;
 } Fiber;
-
-typedef struct {
-  BA         ba;    // root block allocator
-  Fiber*     fb;    // currently executing fiber
-
-  // Misc
-  void (*errPrinter)();
-} Civ;
-
-extern char**     ARGV;
-extern Civ        civ;
-
-void Civ_init(Fiber* fb);
-
-static inline void Fiber_init(Fiber* fb, jmp_buf* errJmp) {
-  *fb = (Fiber) {
-    .errJmp = errJmp,
-  };
-}
 
 // #################################
 // # File
@@ -779,6 +767,13 @@ static inline Resource* File_asResource(File* f) {
 void File_extend(File f, Slc s);
 void Writer_extend(Writer w, Slc s);
 
+void File_flush(File f);
+
+
+S File_consume  (File   f, Buf* b);
+S Reader_consume(Reader f, Buf* b);
+
+
 // Get the pointer to index, reading if necessary.
 U1* Reader_get(Reader f, U2 i);
 
@@ -827,13 +822,22 @@ static inline BufFile BufFile_init(Ring r, Buf b) {
   };
 }
 
+// BufFile_varNt: a fake file for reading only.
 // Typical use:
-// BufFile_var(f, 16, "An example string."");
-#define BufFile_var(NAME, ringCap, STR)              \
+// BufFile_varNt(f, 16, "An example string."");
+#define BufFile_varNt(NAME, ringCap, STR)               \
   U1 LINED(_ringDat)[ringCap + 1];                      \
-  BufFile NAME = BufFile_init( \
-    Ring_init(LINED(_ringDat), ringCap + 1), \
+  BufFile NAME = BufFile_init(                          \
+    Ring_init(LINED(_ringDat), ringCap + 1),            \
     Buf_ntLit(STR));
+
+// BufFile_var: a fake file for writing (and then reading)
+#define BufFile_var(NAME, ringCap, bufCap)              \
+  U1 LINED(_ringDat)[ringCap + 1];                      \
+  U1 LINED(_bufDat) [bufCap];                           \
+  BufFile NAME = BufFile_init(                          \
+    Ring_init(LINED(_ringDat), ringCap + 1),            \
+    (Buf) { .dat=LINED(_bufDat), .cap = bufCap });
 
 DECLARE_METHOD(void      , BufFile,drop, Arena a);
 DECLARE_METHOD(Sll*      , BufFile,resourceLL);
@@ -842,5 +846,136 @@ DECLARE_METHOD(void      , BufFile,read);
 DECLARE_METHOD(BaseFile* , BufFile,asBase);
 DECLARE_METHOD(void      , BufFile,write);
 File BufFile_asFile(BufFile* d);
+
+// #################################
+// # Logger
+// Role. Example file-based logger is in civ_unix.
+
+// Setting level (set to global variable)
+#define LOG_SET_TRACE  0x1F
+#define LOG_SET_DEBUG  0x0F
+#define LOG_SET_INFO   0x07
+#define LOG_SET_WARN   0x03
+#define LOG_SET_ERROR  0x01
+
+// Log level (include with log)
+#define LOG_TRACE  0x10
+#define LOG_DEBUG  0x08
+#define LOG_INFO   0x04
+#define LOG_WARN   0x02
+#define LOG_ERROR  0x01
+#define LOG_NEVER  0x00
+
+// Return whether the levels should cause a log to fire
+static inline bool shouldLog(U1 setting, U1 log) { return setting & log; }
+Slc logLvlMsg(U1 log);
+
+typedef struct {
+  Arena arena;  // Arena owned by formatter
+  U2    pretty; // Current "pretty" level, affects indent depth
+} FmtState;
+
+// Formatter is used for formatting variables (including pretty-printing)
+// It is castable to a Buffer
+typedef struct {
+  MWriter     w;                // Formatter is also a writer
+  FmtState*   (*state)(void* d);  // get formater values (to use/modify)
+} MFmt;
+typedef struct { void* d; const MFmt* m; } Fmt;
+static inline Writer Fmt_asWriter(Fmt f)
+  { return (Writer){.m = &f.m->w, .d = f.d}; }
+
+typedef struct {
+  U1 lvl; // log settings level (LOG_SET_*)
+} LogConfig;
+
+typedef struct {
+  MResource   r;
+  MFmt        fmt;
+  LogConfig*     (*logConfig)(void* d);
+
+  // Start/end a log.
+  // It is invalid to start another log before the current one is ended.
+  bool (*start) (void* d, U1 lvl);  // true=log actually started
+  void (*add)   (void* d, Slc msg); // alternative: write with file
+  void (*end)   (void* d);
+
+  // Add structured data.
+  // Call this -> add all data to Buffer -> close it.
+  // Structured data is typically zoa.
+  // Writer*      (*data)   (void* d, Slc name, Slc type);
+} MLogger;
+typedef struct { void* d; const MLogger* m; } Logger;
+
+static inline Writer Logger_asWriter(Logger f) {
+  return (Writer) { .m = &f.m->fmt.w, .d = f.d };
+}
+
+// #################################
+// # File Fmt + Logger
+
+typedef struct { File   f; FmtState state; } FileFmt;
+DECLARE_METHOD(FmtState*, FileFmt,state);
+DECLARE_METHOD(BaseFile*, FileFmt,asBase);
+DECLARE_METHOD(void    ,  FileFmt,write);
+
+MFmt* FileFmt_mFmt();
+
+typedef struct {
+  Sll*     sll;
+  FileFmt  fmt;
+  LogConfig config;
+  bool started;
+} FileLogger;
+MLogger* FileLogger_mLogger();
+
+DECLARE_METHOD(bool       , FileLogger,drop, Arena a);
+DECLARE_METHOD(Sll*       , FileLogger,resourceLL);
+DECLARE_METHOD(FmtState*  , FileLogger,state);
+DECLARE_METHOD(BaseFile*  , FileLogger,asBase);
+DECLARE_METHOD(void       , FileLogger,write);
+DECLARE_METHOD(LogConfig* , FileLogger,logConfig);
+DECLARE_METHOD(bool       , FileLogger,start, U1 lvl);
+DECLARE_METHOD(void       , FileLogger,add, Slc msg);
+DECLARE_METHOD(void       , FileLogger,end);
+
+// Initialize a file logger using values
+FileLogger  FileLogger_init(Arena a, File f, U1 logCfg);
+
+// Allocate necessary values from arena
+FileLogger* FileLogger_new(Arena a, File f);
+
+static inline Logger FileLogger_asLogger(FileLogger* f) {
+  return (Logger) { .m = FileLogger_mLogger(), .d = f };
+}
+static inline Writer FileLogger_asWriter(FileLogger* f) {
+  return (Writer) { .m = &FileLogger_mLogger()->fmt.w, .d = f };
+}
+
+// #################################
+// # Global Civ struct
+
+typedef struct {
+  BA         ba;    // root block allocator
+  Fiber*     fb;    // currently executing fiber
+  U1 logLvl;
+
+  File logFile;  File outFile;
+  Logger log;
+
+  // Misc
+  void (*errPrinter)();
+} Civ;
+
+extern char**     ARGV;
+extern Civ        civ;
+
+void Civ_init(Fiber* fb, U1 logLvl);
+
+static inline void Fiber_init(Fiber* fb, jmp_buf* errJmp) {
+  *fb = (Fiber) {
+    .errJmp = errJmp,
+  };
+}
 
 #endif // __CIV_H

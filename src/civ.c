@@ -15,8 +15,11 @@ I4 S_cmp(S l, S r) {
   else      return 0;
 }
 
-void Civ_init(Fiber* fb) {
-  civ = (Civ) {.fb = fb};
+void Civ_init(Fiber* fb, U1 logLvl) {
+  civ = (Civ) {
+    .fb = fb,
+    .logLvl = logLvl,
+  };
 }
 
 void runErrPrinter() {
@@ -98,6 +101,7 @@ begin:
 }
 
 U2 Slc_move(Slc to, Slc from) {
+  // TODO: use S_min instead?
   if(to.len > from.len) {
     memmove(to.dat, from.dat, from.len);
     return from.len;
@@ -265,7 +269,29 @@ Slc Ring_avail(Ring* r) {
 }
 
 // Move as much data as possible into ring. Return the amount moved.
-U2 Ring_move(Ring* r, Slc s) { return Slc_move(Ring_avail(r), s); }
+// Ring is updated.
+U2 Ring_move(Ring* r, Slc s) {
+  U2 len = 0; U2 a = Ring_remain(r);
+  while(a and s.len) {
+    U2 m = Slc_move(Ring_avail(r), s);
+    Ring_incTail(r, m);
+    len += m; a -= m;
+    s = (Slc) {.dat = s.dat + m, .len = s.len - m};
+  }
+  return len;
+}
+
+#define RING_MOVE(VAR, R, B) \
+  U2 VAR = Slc_move( \
+    (Slc){.dat = (B)->dat + (B)->len, .len = (B)->cap - (B)->len}, \
+    Ring_avail(R)); \
+  Ring_incHead(R, VAR); (B)->len += VAR
+
+U2 Ring_consume(Ring* r, Buf* b) {
+  RING_MOVE(moved1, r, b);
+  RING_MOVE(moved2, r, b);
+  return moved1 + moved2;
+}
 
 Slc Ring_1st(Ring* r) {
   if(r->tail >= r->head) {
@@ -582,27 +608,41 @@ DEFINE_METHODS(MArena, BBA_mArena,
 
 Arena BBA_asArena(BBA* d) { return (Arena) { .m = BBA_mArena(), .d = d }; }
 
-void writeAll(Writer w, Slc s) {
-  BaseFile* b = Xr(w, asBase);
-  while(s.len) {
-    U2 moved = Ring_move(&b->ring, s);
-    s = (Slc){s.dat + moved, s.len - moved};
-    Xr(w, write);
-  }
-}
-
-#define FEXTEND { \
-  BaseFile* b = Xr(f, asBase);            \
-  while(s.len) {                          \
-    U2 moved = Ring_move(&b->ring, s);    \
+// Write a Slc to a file.
+#define FEXTEND {                            \
+  BaseFile* b = Xr(f, asBase);               \
+  while(s.len) {                             \
+    U2 moved = Ring_move(&b->ring, s);       \
     s = (Slc){s.dat + moved, s.len - moved}; \
-    if(s.len) Xr(f, write); \
-  } \
+    if(s.len) Xr(f, write);                  \
+  }                                          \
+}
+
+void File_extend  (File   f, Slc s) FEXTEND
+void Writer_extend(Writer f, Slc s) FEXTEND
+#undef FEXTEND
+
+void File_flush(File f) {
+  BaseFile* b = Xr(f, asBase);
+  do {
+    Xr(f,write);
+  } while(b->code < File_DONE);
 }
 
 
-void File_extend(File f, Slc s)      FEXTEND
-void Writter_extend(Writer f, Slc s) FEXTEND
+// Read from file into Buf until Buf is full. Return the number of bytes read.
+#define FCONSUME {                                            \
+  BaseFile* bf = Xr(f, asBase);                               \
+  S read = 0;                                                 \
+  while((b->cap < b->len) and (bf->code < File_EOF)) {        \
+    Xr(f,read);                                               \
+    read += Ring_consume(&bf->ring, b);                       \
+  }                                                           \
+  return read;                                                \
+}
+
+S File_consume  (File   f, Buf* b) FCONSUME
+S Reader_consume(Reader f, Buf* b) FCONSUME
 
 U1* Reader_get(Reader f, U2 i) {
   BaseFile* b = Xr(f, asBase);
@@ -686,3 +726,101 @@ DEFINE_METHODS(MFile, BufFile_mFile,
 File BufFile_asFile(BufFile* d) {
   return (File) { .m = BufFile_mFile(), .d = d };
 }
+
+// #################################
+// # Fmt
+
+// TODO: the BaseFile returned will be a sub-one, which should be intercepted to
+// insert pretty indents.
+DEFINE_METHOD(FmtState*, FileFmt,state)    { return &this->state; }
+DEFINE_METHOD(BaseFile*, FileFmt,asBase)   { return Xr(this->f,asBase); }
+DEFINE_METHOD(void,      FileFmt,write)    { return Xr(this->f,write); }
+
+DEFINE_METHODS(MFmt, FileFmt_mFmt,
+  .w = (MWriter) {
+    .asBase = M_FileFmt_asBase,
+    .write = M_FileFmt_write,
+  },
+  .state = M_FileFmt_state,
+)
+
+// #################################
+// # Logger
+
+Slc logLvlMsg(U1 log) {
+  switch(log) {
+    case LOG_TRACE: return SLC("?TRC");
+    case LOG_DEBUG: return SLC("?DBG");
+    case LOG_INFO:  return SLC("INFO");
+    case LOG_WARN:  return SLC("WARN");
+    case LOG_ERROR: return SLC("!ERR");
+    default: return SLC("UNKN");
+  }
+}
+
+DEFINE_METHOD(bool, FileLogger,drop, Arena a) {
+  Xr(this->fmt.f,close);
+  Xr(this->fmt.state.arena,drop);
+  return true;
+}
+DEFINE_METHOD(Sll*, FileLogger,resourceLL)   { return this->sll; }
+DEFINE_METHOD(BaseFile*,  FileLogger,asBase) { return Xr(this->fmt.f,asBase); }
+DEFINE_METHOD(void,       FileLogger,write)  { return Xr(this->fmt.f,write); }
+DEFINE_METHOD(FmtState*,  FileLogger,state)  { return &this->fmt.state; }
+DEFINE_METHOD(LogConfig*, FileLogger,logConfig) { return &this->config; }
+DEFINE_METHOD(bool, FileLogger,start, U1 lvl) {
+  if(not shouldLog(this->config.lvl, lvl)) return false;
+  ASSERT(not this->started, "Logger started twice");
+  this->started = true;
+  File_extend(this->fmt.f, SLC("["));
+  File_extend(this->fmt.f, logLvlMsg(lvl));
+  File_extend(this->fmt.f, SLC("] "));
+  return true;
+}
+DEFINE_METHOD(void, FileLogger,add, Slc msg) {
+  // TODO: handle indents
+  File_extend(this->fmt.f, msg);
+}
+DEFINE_METHOD(void, FileLogger,end) {
+  ASSERT(this->started, "Logger end without start");
+  File_extend(this->fmt.f, SLC("\n"));
+  File_flush(this->fmt.f);
+  BaseFile* fb = Xr(this->fmt.f,asBase);
+  assert(0 == Ring_len(&fb->ring));
+  this->started = false;
+}
+
+DEFINE_METHODS(MLogger, FileLogger_mLogger,
+  .r = (MResource) {
+    .drop = M_FileLogger_drop,
+    .resourceLL = M_FileLogger_resourceLL,
+  },
+  .fmt = (MFmt) {
+    .w = (MWriter) {
+      .asBase = M_FileLogger_asBase,
+      .write = M_FileLogger_write,
+    },
+    .state = M_FileLogger_state,
+  },
+  .start = M_FileLogger_start,
+  .add   = M_FileLogger_add,
+  .end   = M_FileLogger_end,
+)
+
+FileLogger FileLogger_init(Arena a, File f, U1 logCfg) {
+  return (FileLogger) {
+    .fmt = (FileFmt) { .f = f, .state = (FmtState) {
+      .arena = a,
+    }},
+    .config = (LogConfig) { .lvl = logCfg },
+  };
+}
+
+FileLogger* FileLogger_new(Arena a, File f) {
+  BBA* bba      = Xr(a,alloc, sizeof(BBA)        , RSIZE);
+  FileLogger* l = Xr(a,alloc, sizeof(FileLogger) , RSIZE);
+  ASSERT(bba && l, "FileLogger OOM"); *bba = BBA_new();
+  *l = FileLogger_init(BBA_asArena(bba), f, civ.logLvl);
+  return l;
+}
+
