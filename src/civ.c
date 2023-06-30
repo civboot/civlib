@@ -315,9 +315,8 @@ I4 Ring_cmpSlc(Ring* r, Slc s) {
 // ##
 // # Sll
 void Sll_add(Sll** to, Sll* node) {
-  Sll* next = *to;
+  node->next = *to;
   *to = node;
-  node->next = next;
 }
 
 Sll* Sll_pop(Sll** from) {
@@ -516,6 +515,15 @@ void BA_freeArray(BA* ba, S len, BANode nodes[], Block blocks[]) {
 
 // #################################
 // # BBA: Block Bump Arena
+
+S BBA_used(BBA* bba) {
+  S used = 0;
+  for(BANode* dat = bba->dat; dat; dat = dat->next) {
+    used += dat->block->bot + (BLOCK_AVAIL - dat->block->top);
+  }
+  return used;
+}
+
 DllRoot* BBA_asDllRoot(BBA* bba) { return (DllRoot*)&bba->dat; }
 
 DEFINE_METHOD(void, BBA,drop) {

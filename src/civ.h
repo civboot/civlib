@@ -11,6 +11,7 @@
 #include <stdint.h>  // usize16_t, etc
 #include <string.h>  // (mem|str)(cmp|cpy|move|set), strlen
 #include <setjmp.h>  // setjmp
+#include <stddef.h>
 
 // Testing and debuggin
 #include <assert.h>  // assert
@@ -659,6 +660,8 @@ static inline Resource* Arena_asResource(Arena* a) { return (Resource*) a; }
 typedef struct { BA* ba; BANode* dat; } BBA;
 #define BBA_new() (BBA) { .ba = &civ.ba }
 
+S    BBA_used(BBA* b);
+
 DllRoot* BBA_asDllRoot(BBA* bba);
 Arena    BBA_asArena(BBA* b);
 #define  BBA_block(BBA) ((BBA)->dat->block)
@@ -672,6 +675,7 @@ DECLARE_METHOD(Slc* , BBA,free , void* data, S sz, U2 alignment); // BBA_free
 DECLARE_METHOD(S , BBA,maxAlloc); // BBA_maxAlloc
 
 MArena* mBBAGet();
+
 
 
 // #################################
@@ -892,7 +896,7 @@ typedef struct {
 typedef struct {
   MResource   r;
   MFmt        fmt;
-  LogConfig*     (*logConfig)(void* d);
+  LogConfig*  (*logConfig)(void* d);
 
   // Start/end a log.
   // It is invalid to start another log before the current one is ended.
