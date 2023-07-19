@@ -6,8 +6,12 @@ OUT=bin/tests
 
 all: test
 
-test: build
+test: lua build
 	./$(OUT)
+
+lua:
+	lua tests/test_civ.lua
+	lua tests/test_sh.lua
 
 build:
 	mkdir -p bin/
