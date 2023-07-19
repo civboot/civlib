@@ -1,18 +1,16 @@
 -- sh.lua: use lua as your shell
 --
--- local shmod = require('sh'); local sh = shmod.sh
+-- local shmod = require('sh')
+-- local sh = shmod.sh
 -- sh[[ echo 'foo' bar ]]
 --
--- shmod.SETTINGS.debug = false -- turn off debug for production aps
--- sh{[[ echo 'foo' bar ]], debug=true) -- force debug
--- out, rc = sh{[[ false ]], check=true) -- don't check rc
+-- shmod.SET.debug = true            -- turn on shell debug
+-- sh{[[ echo 'foo' bar ]], debug=true)   -- force debug
+-- out, rc = sh{[[ false ]], check=false) -- don't check rc
 
-local SETTINGS = {
-  debug=false, xsh=false
+local SET = {
+  debug=false, host=false,
 }
-
-local MULLI_HEADER = 'echo $(cat << __LUA_EOF__\n'
-local MULLI_FOOTER = '\n__LUA_EOF__\n) '
 
 local add, concat = table.insert, table.concat
 
@@ -54,6 +52,16 @@ local function asStr(v)
   return v
 end
 
+local function quote(v)
+  v = asStr(v)
+  if string.match(v, "'") then return nil end -- cannot quote values with '
+  return "'" .. asStr(v) .. "'"
+end
+
+local EMBED0 = ' echo $(cat << __LUA_EOF__\n'
+local EMBED1 = '\n__LUA_EOF__\n) '
+local function embedded(s) return EMBED0 .. asStr(s) .. EMBED1 end
+
 -- append the string necessary for an echo to work
 local function insertStdin(cmd, stdin)
   local out = {}
@@ -72,31 +80,31 @@ end
 -- Just get the command, don't do anything
 --
 -- returns cmdSettings, cmdBuf
-local function shCmd(cmd)
-  print('got cmd', tfmt(cmd), cmd.foo)
-  if 'string' == type(cmd) then cmd = {cmd, debug=SETTINGS.debug}
+local function shCmd(cmd, set)
+  set = set or {}
+  if nil == set.debug then set.debug = SET.debug end
+  if nil == set.check and not set.raw then set.check = true end
+  if 'string' == type(cmd) then cmd = {cmd}
   else                          cmd = tcopy(cmd) end
-  if nil == cmd.check and not cmd.raw then cmd.check = true end
-  local cmd, set = cmd, pop(cmd, 'debug', 'check', 'raw', 'stdin')
   if set.stdin then cmd = insertStdin(cmd, set.stdin) end
+
   for k, v in pairs(cmd) do
     if 'string' == type(k) then
-      add(cmd, concat({'--', k, '=', tostring(v)}))
+      v = quote(v); if not v then
+        return nil, nil, 'flag "'..k..'" has single quote character'
+      end
+      add(cmd, concat({'--', k, '=', v}))
     end
   end
   return concat(cmd, ' '), set
 end
 
-local function shDebug(cmd, set)
+local function _sh(cmd, set, err)
+  if err then error(err) end
   if set.debug then
     o = o or io.stderr
     o:write('[==[ ') o:write(cmd) o:write(' ]==]\n')
   end
-end
-
--- Run a command on the bash shell
-local function sh(cmd)
-  local cmd, set = shCmd(cmd)
   local o = set.out -- output
   if set.raw then return execute(cmd, true) end
   local out, rc = execute(cmd); if o then o:write(out) end
@@ -106,18 +114,37 @@ local function sh(cmd)
   end
   return out, rc[3]
 end
-
--- Run on a command on an eXternal shell
--- this uses the global value SETTINGS.xsh to get the host
-local function xsh(cmd, host)
-  host = host or SETTINGS.xsh
-  if not host then error("Must provide host or set in SETTINGS.xsh") end
+-- Run a command on the bash shell
+local function sh(cmd, set)
+  local cmd, set, err = shCmd(cmd, set);
+  return _sh(cmd, set, err)
 end
 
+SET.PWD = string.match(sh'echo $PWD', '^%s*.-%s*$')
+
+-- Run on a command (over ssh) on an eXternal shell
+-- This uses the global value SET.host to get the host
+-- It also changes the directory to the current directory
+-- (set in SET.PWD)
+local function xsh(cmd, set)  set = set or {}
+  set.host = set.host or SET.host
+  if not set.host then error("Must set a host") end
+  local cmd, set, err = shCmd(cmd, set); if err then error(err) end
+  local x = {}
+  extend(x, {'ssh -o LogLevel=QUIET -t ', set.host, ' '})
+  add(x, embedded{'cd ', SET.PWD, ' && ', cmd})
+  return _sh(asStr(x), set)
+end
+
+-- "user" variants that write to stdout
+local function shu(cmd, set) io.stdout:write(sh(cmd, set)) end
+local function xshu(cmd, set) io.stdout:write(xsh(cmd, set)) end
+
 return {
-  sh=sh, shCmd=shCmd, tfmt=tfmt,
-  quoted=quoted,
-  SETTINGS=SETTINGS,
+  shu=shu, xshu=xshu,
+  sh=sh, xsh=xsh, shCmd=shCmd, tfmt=tfmt,
+  quoted=quoted, embedded=embedded,
+  SET=SET,
   extend=extend, asStr=asStr,
   addStdin=addStdin,
 }
