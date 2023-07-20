@@ -69,9 +69,14 @@ test('sh', nil, function()
   local result = sh('false', {check=false})
   assertEq(1, result.rc)
 
+  result = sh([[ echo '<stderr from test>' 1>&2 ]],
+              {err=true})
+  assert('<stderr from test>', result.err)
+
   local cmd = {'echo', foo='bar'}
   assertEq("echo --foo='bar'", shCmd{'echo', foo='bar'})
   assertEq('--foo=bar\n'  ,  sh{'echo', foo='bar'}.out)
   assert(select(3, shCmd{foo="that's bad"})) -- assert error
+  assertEq('from pipe', sh([[ cat ]], {inp='from pipe'}).out)
 end)
 

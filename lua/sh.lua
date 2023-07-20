@@ -18,6 +18,7 @@ local shix = require'shix'
 local ShSet = civ.struct('ShSet', {
   {'check', Bool, true},  -- check the rc
   {'inp',   Str,  false}, -- value to send to process input
+  {'err',   Bool, false}, -- get stderr
   {'debug', Bool, false}, -- log all inputs/outputs
   {'log',   nil,  io.stderr}, -- pipe to debug/log to
 
@@ -39,6 +40,7 @@ local ShResult = civ.struct('ShResult', {
   -- These are only available when fork=false
   {'rc',  Num, false}, -- the return code
   {'out', Str, false}, -- the output
+  {'err', Str, false}, -- the stderr
 
   -- These can only be available when fork=true
   -- Note: fork.pipes will have the requested {r, w, lr}
@@ -112,6 +114,7 @@ local function shCmd(cmd, set)
   if set.check then assert(not set.fork) end
   if 'string' == type(cmd) then cmd = {cmd}
   else                          cmd = tcopy(cmd) end
+  assert(not (set.fork and set.err), "cannot set fork and err")
 
   for k, v in pairs(cmd) do
     if 'string' == type(k) then
@@ -143,7 +146,7 @@ local function _sh(cmd, set, err)
     local out, rc = luash(cmd)
     res = ShResult{out=out, rc=rc}
   else
-    local f = shix.Fork(true, set.w or set.inp, set.lr)
+    local f = shix.Fork(true, set.w or set.inp, set.lr or set.err)
     if not f.isParent then f:exec(cmd) end
     res.status = 'started'
     if set.inp then
@@ -155,6 +158,7 @@ local function _sh(cmd, set, err)
     else
       print('pipes.r', f.pipes.r)
       res.out = f.pipes.r:read('a')
+      if set.err then res.err = f.pipes.lr:read('a') end
       while not f:wait() do shix.sleep(0.05) end
       res.rc = f.rc
     end
