@@ -12,6 +12,39 @@ local SET = {
   debug=false, host=false,
 }
 
+local civ = require'civ'
+local shix = require'shix'
+
+local ShSet = civ.struct('ShSet', {
+  {'check', Bool, true},  -- check the rc
+  {'inp',   Str,  false}, -- value to send to process input
+  {'debug', Bool, false}, -- log all inputs/outputs
+  {'log',   nil,  io.stderr}, -- pipe to debug/log to
+
+  -- return out.fork. Don't get the output or stop the fork.
+  {'fork',  Bool, false},
+
+  -- require fork=true. Will cause fork to have a pipe with
+  -- the corresponding field/s
+  {'w',     nil, false},  -- create/use a write pipe
+  {'lr',    nil, false},  -- create/use a log-read (stderr) pipe
+
+  -- Used for xsh
+  {'host',  Str,  false},
+})
+
+local ShResult = civ.struct('ShResult', {
+  {'status', Str}, -- the status of the fork
+
+  -- These are only available when fork=false
+  {'rc',  Num, false}, -- the return code
+  {'out', Str, false}, -- the output
+
+  -- These can only be available when fork=true
+  -- Note: fork.pipes will have the requested {r, w, lr}
+  {'fork', shix.Fork, false},
+})
+
 local add, concat = table.insert, table.concat
 
 local function extend(t, a)
@@ -62,18 +95,10 @@ local EMBED0 = ' echo $(cat << __LUA_EOF__\n'
 local EMBED1 = '\n__LUA_EOF__\n) '
 local function embedded(s) return EMBED0 .. asStr(s) .. EMBED1 end
 
--- append the string necessary for an echo to work
-local function insertStdin(cmd, stdin)
-  local out = {}
-  extend(out, {MULTI_HEADER, asStr(stdin), MULTI_FOOTER})
-  extend(out, cmd)
-  return out
-end
-
--- execute a command, return the output and rc
-local function execute(c, raw)
+-- execute a command, using lua's shell
+-- return the output and rc
+local function luash(c)
   local f = assert(io.popen(asStr(c)), 'r')
-  if raw then return f end
   return f:read('*a'), {f:close()}
 end
 
@@ -81,12 +106,12 @@ end
 --
 -- returns cmdSettings, cmdBuf
 local function shCmd(cmd, set)
-  set = set or {}
+  set = ShSet(set or {})
   if nil == set.debug then set.debug = SET.debug end
-  if nil == set.check and not set.raw then set.check = true end
+  if nil == set.check and not set.fork then set.check = true end
+  if set.check then assert(not set.fork) end
   if 'string' == type(cmd) then cmd = {cmd}
   else                          cmd = tcopy(cmd) end
-  if set.stdin then cmd = insertStdin(cmd, set.stdin) end
 
   for k, v in pairs(cmd) do
     if 'string' == type(k) then
@@ -96,31 +121,59 @@ local function shCmd(cmd, set)
       add(cmd, concat({'--', k, '=', v}))
     end
   end
-  return concat(cmd, ' '), set
+  cmd = concat(cmd, ' ')
+  if '' == string.gsub(cmd, '%s', '') then
+    error('cannot execute an empty command')
+  end
+  return cmd, set
 end
 
 local function _sh(cmd, set, err)
   if err then error(err) end
+  local log = set.log -- output
   if set.debug then
-    o = o or io.stderr
-    o:write('[==[ ') o:write(cmd) o:write(' ]==]\n')
+    log = log or io.stderr
+    log:write('[==[ ', cmd, ' ]==]\n')
   end
-  local o = set.out -- output
-  if set.raw then return execute(cmd, true) end
-  local out, rc = execute(cmd); if o then o:write(out) end
-  if set.check and 0 ~= rc[3] then
-    error(string.format(
-      '!! rc=%s for command [[ %s ]] !!\n%s', rc[3], cmd, out))
+
+  local res = ShResult{status='not-started'}
+  if not shix then
+    assert(not (set.inp or set.fork or set.w or set.lr),
+           'requires posix for: inp, fork, w, lr')
+    local out, rc = luash(cmd)
+    res = ShResult{out=out, rc=rc}
+  else
+    local f = shix.Fork(true, set.w or set.inp, set.lr)
+    if not f.isParent then f:exec(cmd) end
+    res.status = 'started'
+    if set.inp then
+      -- write+close input so process can function
+      f.pipes.w:write(set.inp)
+      f.pipes.w:close(); f.pipes.w = nil
+    end
+    if set.fork then res.fork = f
+    else
+      print('pipes.r', f.pipes.r)
+      res.out = f.pipes.r:read('a')
+      while not f:wait() do shix.sleep(0.05) end
+      res.rc = f.rc
+    end
+    res.status = f.status
   end
-  return out, rc[3]
+  if log and res.out then log:write(res.out, '\n') end
+  if set.check and res.rc ~= 0 then error(
+    'non-zero return code: ' .. tostring(res.rc)
+  )end
+  return res
 end
+
 -- Run a command on the bash shell
 local function sh(cmd, set)
   local cmd, set, err = shCmd(cmd, set);
   return _sh(cmd, set, err)
 end
 
-SET.PWD = string.match(sh'echo $PWD', '^%s*.-%s*$')
+SET.PWD = string.match(sh'echo $PWD'.out, '^%s*.-%s*$')
 
 -- Run on a command (over ssh) on an eXternal shell
 -- This uses the global value SET.host to get the host

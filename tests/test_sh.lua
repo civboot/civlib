@@ -64,13 +64,14 @@ test('exec', nil, function()
 end)
 
 test('sh', nil, function()
-  assertEq('on stdout\n', sh[[ echo 'on' stdout ]])
-  assertEq(''           , sh[[ echo '<stderr from test>' 1>&2 ]])
-  local _, rc = sh('false', {check=false}); assertEq(1, rc)
+  assertEq('on stdout\n', sh[[ echo 'on' stdout ]].out)
+  assertEq(''           , sh[[ echo '<stderr from test>' 1>&2 ]].out)
+  local result = sh('false', {check=false})
+  assertEq(1, result.rc)
 
   local cmd = {'echo', foo='bar'}
   assertEq("echo --foo='bar'", shCmd{'echo', foo='bar'})
-  assertEq('--foo=bar\n'  ,  sh{'echo', foo='bar'})
+  assertEq('--foo=bar\n'  ,  sh{'echo', foo='bar'}.out)
   assert(select(3, shCmd{foo="that's bad"})) -- assert error
 end)
 
