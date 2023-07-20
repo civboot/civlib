@@ -6,8 +6,6 @@ OUT=bin/tests
 
 .PHONY: all test clean lua
 
-export LUA_PATH = ./lua/?.lua
-
 all: test
 
 test: lua build

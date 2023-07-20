@@ -1216,7 +1216,8 @@ return {
 
   -- struct
   ty = ty,
-  struct = struct, pathVal = pathVal, pathTy = pathTy,
+  struct = struct, constructor=constructor, method=method,
+  pathVal = pathVal, pathTy = pathTy,
   dotSplit = dotSplit,
   genStruct = genStruct,
   orderedKeys = orderedKeys,
