@@ -1,4 +1,4 @@
-require('gciv'); local mod
+require('civ'):grequire(); local mod
 test('load', nil, function() mod = require('sh') end)
 
 local sh, shCmd, assertSh = mod.sh, mod.shCmd, mod.assertSh

@@ -7,9 +7,8 @@ assert(s.a)
 civ.assertEq(civ.Set{'a', 'b', 'c'}, s)
 local s2 = civ.Set{'b', 'c', 'd'}
 civ.assertEq(s:union(s2), civ.Set{'b', 'c'})
-
 civ.assertGlobals(g)
-require('gciv'); g = globals()
+civ:grequire(); g = globals()
 
 test("fmt", nil, function()
   assertEq("{1=1 2=2}", fmt({1, 2}))

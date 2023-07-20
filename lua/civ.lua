@@ -1,5 +1,5 @@
 
-local CHECK = {field = false}
+local CIV = {checkField = false}
 
 -- ###################
 -- # Utility Functions
@@ -594,7 +594,7 @@ local function structIndex (t, k)
 end
 
 local function structNewIndex (t, k, v)
-  if CHECK.field and not getmetatable(t)["#tys"][k] then
+  if CIV.checkField and not getmetatable(t)["#tys"][k] then
     structInvalidField(getmetatable(t), k)
   end
   rawset(t, k, v)
@@ -1165,7 +1165,35 @@ local function test(name, options, fn)
   assertGlobals(g, options.expectGlobals)
 end
 
+-- #####################
+-- # Import Utilities
+
+-- Optional require. Example:
+--     myMod, err = want'myMod'
+--     if not myMod then print(err) end
+local function want(name)
+  local out; if xpcall(
+      function()  out = require(name) end,
+      function(e) out = e end)
+  then return out          -- success
+  else return nil, out end -- error
+end
+
+-- global require: import and assign all values to be global
+-- mod can be a name or a table
+local function grequire(mod)
+  mod = 'string' == type(mod) and require(mod) or mod
+  for k, v in pairs(mod) do
+    if nil ~= _G[k] then error(
+      'grequire: "'..k..'" is already a global!'
+    ) end
+    _G[k] = v
+  end
+end
+
 return {
+  CIV = CIV,
+  -- types
   Nil = Nil, Bool = Bool, Str  = Str,  Num = Num,
   Fn  = Fn,  Tbl  = Tbl,
   Map = Map, List = List, Set = Set,
@@ -1204,4 +1232,7 @@ return {
   test = test,
   assertEq = assertEq,
   globals = globals, assertGlobals = assertGlobals,
+
+  -- import utilities
+  want=want, grequire=grequire,
 }
