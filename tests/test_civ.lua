@@ -10,6 +10,14 @@ civ.assertEq(s:union(s2), civ.Set{'b', 'c'})
 civ.assertGlobals(g)
 civ:grequire(); g = globals()
 
+test("str", nil, function()
+  assertEq("12 34 56", strinsert("1256", 2, " 34 "))
+  assertEq("78 1256", strinsert("1256", 0, "78 "))
+  assertEq("1256 78", strinsert("1256", 4, " 78"))
+  local a, b = strsplit('12345', 3)
+  assertEq(a, '123'); assertEq(b, '45')
+end)
+
 test("fmt", nil, function()
   assertEq("{1=1 2=2}", fmt({1, 2}))
   assertEq([[{baz=boo foo=bar}]], fmt({foo="bar", baz="boo"}))
@@ -40,6 +48,17 @@ test('set', nil, function()
   local l = sort(List.fromIter(s:iter()))
   assertEq(List{'a', 'b', 'c'}, l)
 end)
+
+test('list', nil, function()
+  local l = List{'a', 'b', 'c', 1, 2, 3}
+  assertEq(List{1, 2, 3}, l:drain(3))
+  assertEq(List{'a', 'b', 'c'}, l)
+  assertEq(List{}, l:drain(0))
+  assertEq(List{'a', 'b', 'c'}, l)
+  assertEq(List{'c'}, l:drain(1))
+  assertEq(List{'a', 'b'}, l)
+end)
+
 
 test("update-extend", nil, function()
   local a = {'a', 'b', 'c'}
@@ -202,6 +221,18 @@ three | 1
 ]]
   assertEq(expected, trim(tostring(result)))
 
+end)
+
+test('time', nil, function()
+  local N = Duration.NANO
+  local d = Duration(3, 500)
+  assertEq(Duration(2, 500),     Duration(3, 500) - Duration(1))
+  assertEq(Duration(2, N - 900), Duration(3, 0)   - Duration(0, 900))
+  assertEq(Duration(2, N - 800), Duration(3, 100) - Duration(0, 900))
+  assertEq(Duration(2), Duration.fromMs(2000))
+  assert(Duration(2) < Duration(3))
+  assert(Duration(2) < Duration(2, 100))
+  assert(not (Duration(2) < Duration(2)))
 end)
 
 assertGlobals(g)

@@ -1,12 +1,15 @@
 
 local CIV = {checkField = false}
 
+local civ = {}
+
 -- ###################
 -- # Utility Functions
 
 local function identity(v) return v end
-local function max(a, b) if a > b then return a end return b end
-local function min(a, b) if a < b then return a end return b end
+civ.max = function(a, b) if a > b then return a end return b end
+civ.min = function(a, b) if a < b then return a end return b end
+
 -- return keys array
 local function keysarr(t)
   local a = {}; for k in pairs(t) do table.insert(a, k) end
@@ -50,7 +53,13 @@ local function keysIter(t)
   end
 end
 
--- used primarily for formatting
+-- return the first i characters and the remainder
+civ.strsplit = function(s, i)
+  return string.sub(s, 1, i), string.sub(s, i+1)
+end
+civ.strinsert = function (s, i, v)
+  return string.sub(s, 1, i) .. v .. string.sub(s, i+1)
+end
 
 -- shallow copy and update with add
 local function copy(t, add)
@@ -362,13 +371,24 @@ end)
 method(List, 'empty', function() return List{} end)
 method(List, '__index', _methIndex)
 method(List, 'add', table.insert)
+method(List, 'pop', table.remove)
 method(List, 'extend', extend)
+
+-- pop len elements from list
+method(List, 'drain', function(self, len)
+  local l = List{}
+  print('DRAIN ', #self, 'len=', len, self)
+  for i=#self - len + 1, #self do
+    print('drain', i, string.format('%q', (self[i])))
+    l:add(self[i]) self[i] = nil
+  end; return l
+end)
 method(List, 'asSorted', sort)
-List.fromIter = function(...)
+method(List, 'fromIter', function(...)
   local l = List{}
   for i, v in ... do l:add(v) end
   return l
-end
+end)
 method(List, '__pairs',  ipairs)
 method(List, 'iter',   ipairs)
 method(List, 'iterFn', iterarr)
@@ -1191,7 +1211,79 @@ local function grequire(mod)
   end
 end
 
-return {
+local NANO  = 1000000000
+local MILLI = 1000000000
+local function durationSub(s, ns, s2, ns2)
+  s, ns = s - s2, ns - ns2
+  print('sub', s, ns)
+  if ns < 0 then
+    ns = NANO + ns
+    s = s - 1
+  end
+  return s, ns
+end
+
+local function assertTime(t)
+  assert(math.floor(t.s) == t.s, 'non-int seconds')
+  assert(math.floor(t.ns) == t.ns, 'non-int nano-seconds')
+  assert(t.ns < NANO, 'ns too large')
+  return t
+end
+
+civ.Duration = struct('Duration', {{'s', Num}, {'ns', Num}})
+constructor(civ.Duration, function(ty_, s, ns)
+  if ns == nil then return civ.Duration.fromSeconds(s) end
+  local out = {s=s, ns=ns}
+  return setmetatable(assertTime(out), civ.Duration)
+end)
+civ.Duration.NANO = NANO
+method(civ.Duration, 'fromSeconds', function(s)
+  local sec = math.floor(s)
+  return civ.Duration(sec, NANO * (sec - s))
+end)
+method(civ.Duration, 'fromMs', function(s)
+  return civ.Duration(s / 1000)
+end)
+method(civ.Duration, 'asSeconds', function(self)
+  return self.s + (self.ns / NANO)
+end)
+method(civ.Duration, '__sub', function(self, r)
+  assert(ty(r) == Duration)
+  local s, ns = durationSub(self.s, self.ns, r.s, r.ns)
+  return Duration(s, ns)
+end)
+method(civ.Duration, '__lt', function(self, o)
+  if self.s < o.s then return true end
+  return self.ns < o.ns
+end)
+method(civ.Duration, '__tostring', function(self)
+  return self:asSeconds() .. 's'
+end)
+
+-- time since the epoch
+civ.Epoch = struct('Epoch', {{'s', Num}, {'ns', Num}})
+constructor(civ.Epoch, function(ty_, s, ns)
+  if ns == nil then return civ.Epoch.fromSeconds(s) end
+  local out = {s=s, ns=ns}
+  return setmetatable(assertTime(out), civ.Epoch)
+end)
+method(civ.Epoch, 'fromSeconds', function(s)
+  local sec = math.floor(s)
+  return civ.Epoch(sec, NANO * (sec - s))
+end)
+method(civ.Epoch, 'asSeconds', civ.Duration.asSeconds)
+method(civ.Epoch, '__sub', function(self, r)
+  self:assertValid(); r:assertValid()
+  local s, ns = durationSub(self.s, self.ns, r.s, r.ns)
+  if ty(e) == Duration then return Epoch(s, ns) end
+  assert(ty(e) == Epoch)
+  return Duration(s, ns)
+end)
+method(civ.Epoch, '__tostring', function(self)
+  return string.format('Epoch(%ss)', self:asSeconds())
+end)
+
+update(civ, {
   CIV = CIV,
   -- types
   Nil = Nil, Bool = Bool, Str  = Str,  Num = Num,
@@ -1236,4 +1328,5 @@ return {
 
   -- import utilities
   want=want, grequire=grequire,
-}
+})
+return civ

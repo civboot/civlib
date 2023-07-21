@@ -1,7 +1,9 @@
 local civ = require'civ'
 local posix = civ.want'posix'
-if not posix then return nil end
-
+if not posix then
+  print'posix not available'
+  return nil
+end
 
 local std_r, std_w, std_lw = 0, 1, 2
 if posix then
@@ -10,10 +12,15 @@ if posix then
   assert(std_lw == posix.fileno(io.stderr))
 end
 
-local NANO = 1000000000
-local function sleep(seconds)
-  local s = math.floor(seconds)
-  posix.nanosleep(s, 1000000000 * (seconds - s))
+local function sleep(duration)
+  posix.nanosleep(duration.s, duration.ns)
+end
+
+-- Return the epoch time
+local function epoch()
+  local s, ns, errnum = posix.clock_gettime(posix.CLOCK_REALTIME)
+  assert(s, ns, errnum)
+  return civ.Epoch{s=s, ns=ns}
 end
 
 local Pipe = civ.struct('Pipe', {{'fd', Num}, {'closed', Bool, false}})
