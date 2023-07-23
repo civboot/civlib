@@ -40,7 +40,10 @@ local function iterarr(l)
   end
 end
 
-local concat = table.concat
+local function concat(t, sep)
+  local s = {}; for i, v in ipairs(t) do s[i] = tostring(v) end
+  return table.concat(s, sep)
+end
 local function sort(t) table.sort(t); return t end
 local function orderedKeys(t) return iterarr(sort(keysarr(t))) end
 
@@ -112,7 +115,7 @@ local function _tyIndex(self, k)
   local ty = getmetatable(self)
   local v = ty["#defaults"][k] or ty[k]
   if v then  return v  end
-  if "string" ~= type(k) then k = "<not str>" end
+  k = ('table' == type(k) and k) or tostring(k)
   error("Unknown member: " .. tyName(self) .. "." .. k)
 end
 
@@ -517,6 +520,7 @@ constructor(Fmt, function(ty_, obj, indent)
   fmtBuf(b, obj)
   return setmetatable(b, ty_)
 end)
+method(Fmt, '__index', _methIndex)
 method(Fmt, 'pretty', function(obj) return Fmt(obj, '  ') end)
 method(Fmt, 'write', function(self, f)
   for _, v in ipairs(self) do f:write(tostring(v)) end
