@@ -61,14 +61,22 @@ civ.strinsert = function (s, i, v)
   return string.sub(s, 1, i) .. v .. string.sub(s, i+1)
 end
 
+local function deepcopy(t)
+  local out = {}; for k, v in pairs(t) do
+    if 'table' == type(v) then v = deepcopy(v) end
+    out[k] = v
+  end
+  return setmetatable(out, getmetatable(t))
+end; civ.deepcopy = deepcopy
+
 -- shallow copy and update with add
 local function copy(t, add)
-  local out = ty(t){}
+  local out = {}
   for k, v in pairs(t) do out[k] = v end
   if add then
     for k, v in pairs(add) do out[k] = v end
   end
-  return out
+  return setmetatable(out, getmetatable(t))
 end
 
 -- update is for dict/set, extend for list
@@ -293,12 +301,24 @@ end)
 method(Map, 'getPath', function(self, path, vFn)
   local d = self
   for i, k in ipairs(path) do
-    d = self[k];
-    if d then
-    elseif vFn then d = vFn(self, i); self[k] = d
+    local nxt = d[k]
+    if nxt then
+    elseif vFn then
+      nxt = vFn(d, i); d[k] = nxt
     else error('path %s failed at i=%s', fmt(path), i) end
+    d = nxt
   end
   return d
+end)
+method(Map, 'setPath', function(self, path, value)
+  local d, len = self, #path
+  assert(len > 0, 'empty path')
+  for i, k in ipairs(path) do
+    if i >= len then break end
+    d = self[k]
+    if not d then d = Map{}; self[k] = d end
+  end
+  d[path[len]] = value
 end)
 
 method(Map, 'diff', function(self, r)
@@ -377,9 +397,7 @@ method(List, 'extend', extend)
 -- pop len elements from list
 method(List, 'drain', function(self, len)
   local l = List{}
-  print('DRAIN ', #self, 'len=', len, self)
   for i=#self - len + 1, #self do
-    print('drain', i, string.format('%q', (self[i])))
     l:add(self[i]) self[i] = nil
   end; return l
 end)
@@ -395,6 +413,30 @@ method(List, 'iterFn', iterarr)
 
 result = List{5, 6}; assert(5 == result[1])
 result:extend{3, 4}; assert(4 == result[4])
+
+civ.LL = newTy('LL')
+civ.LL.__index = _methIndex
+constructor(civ.LL, function(ty_)
+  return setmetatable({}, LL)
+end)
+method(civ.LL, 'isEmpty', function(self)
+  return nil == self.front
+end)
+method(civ.LL, 'addFront', function(self, v)
+  if nil == v then return end
+  local a = {v=v, nxt=self.front, prev=nil}
+  if self.front then self.front.prev = a end
+  self.front = a
+  if not self.back then self.back = self.front end
+end)
+method(civ.LL, 'popBack', function(self)
+  local o = self.back; if o == nil then return end
+  self.back = o.prev
+  if self.back then self.back.nxt = nil
+  else self.front = nil end
+  return o.v
+end)
+
 
 -- ###################
 -- # Formatting
@@ -1199,23 +1241,26 @@ local function want(name)
   else return nil, out end -- error
 end
 
+local GREQUIRED = {}
 -- global require: import and assign all values to be global
 -- mod can be a name or a table
 local function grequire(mod)
   mod = 'string' == type(mod) and require(mod) or mod
+  if GREQUIRED[mod] then return GREQUIRED[mod] end
   for k, v in pairs(mod) do
     if nil ~= _G[k] then error(
       'grequire: "'..k..'" is already a global!'
     ) end
     _G[k] = v
   end
+  GREQUIRED[mod] = mod
+  return mod
 end
 
 local NANO  = 1000000000
 local MILLI = 1000000000
 local function durationSub(s, ns, s2, ns2)
   s, ns = s - s2, ns - ns2
-  print('sub', s, ns)
   if ns < 0 then
     ns = NANO + ns
     s = s - 1
@@ -1239,7 +1284,7 @@ end)
 civ.Duration.NANO = NANO
 method(civ.Duration, 'fromSeconds', function(s)
   local sec = math.floor(s)
-  return civ.Duration(sec, NANO * (sec - s))
+  return civ.Duration(sec, NANO * (s - sec))
 end)
 method(civ.Duration, 'fromMs', function(s)
   return civ.Duration(s / 1000)
@@ -1265,7 +1310,7 @@ civ.Epoch = struct('Epoch', {{'s', Num}, {'ns', Num}})
 constructor(civ.Epoch, function(ty_, s, ns)
   if ns == nil then return civ.Epoch.fromSeconds(s) end
   local out = {s=s, ns=ns}
-  return setmetatable(assertTime(out), civ.Epoch)
+  return setmetatable(assertTime(out), ty_)
 end)
 method(civ.Epoch, 'fromSeconds', function(s)
   local sec = math.floor(s)
@@ -1273,10 +1318,13 @@ method(civ.Epoch, 'fromSeconds', function(s)
 end)
 method(civ.Epoch, 'asSeconds', civ.Duration.asSeconds)
 method(civ.Epoch, '__sub', function(self, r)
-  self:assertValid(); r:assertValid()
+  assert(self)
+  assert(r)
+  assertTime(self)
+  assertTime(r)
   local s, ns = durationSub(self.s, self.ns, r.s, r.ns)
-  if ty(e) == Duration then return Epoch(s, ns) end
-  assert(ty(e) == Epoch)
+  if ty(r) == Duration then return Epoch(s, ns) end
+  assert(ty(r) == Epoch)
   return Duration(s, ns)
 end)
 method(civ.Epoch, '__tostring', function(self)

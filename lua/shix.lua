@@ -1,9 +1,6 @@
 local civ = require'civ'
 local posix = civ.want'posix'
-if not posix then
-  print'posix not available'
-  return nil
-end
+if not posix then return nil end
 
 local std_r, std_w, std_lw = 0, 1, 2
 if posix then
@@ -19,8 +16,8 @@ end
 -- Return the epoch time
 local function epoch()
   local s, ns, errnum = posix.clock_gettime(posix.CLOCK_REALTIME)
-  assert(s, ns, errnum)
-  return civ.Epoch{s=s, ns=ns}
+  assert(s, ns)
+  return civ.Epoch(s, ns)
 end
 
 local Pipe = civ.struct('Pipe', {{'fd', Num}, {'closed', Bool, false}})
@@ -52,7 +49,6 @@ end)
 local function pipe()
   local r, w = posix.pipe()
   assert(r, 'no pipe')
-  print('got pipe', r, w)
   return r, w
 end
 
@@ -65,7 +61,6 @@ civ.method(Pipes, 'from', function(fds)
   local p = Pipes{}; for k, fd in pairs(fds) do
     p[k] = Pipe{fd=fd}
   end;
-  print('Pipes', p)
   return p;
 end)
 -- close all the pipes (in parent or child)
@@ -97,7 +92,6 @@ civ.constructor(Fork, function(ty_, r, w, l)
   if w then child.r,   parent.w = pipe() end
   if l then parent.lr, child.lw = pipe() end
   parent, child = Pipes.from(parent), Pipes.from(child)
-  print('pipes', parent, child)
 
   local self = {cpid = posix.fork()}
   if(not self.cpid) then error('fork failed') end
@@ -121,7 +115,6 @@ civ.method(Fork, 'wait', function(self)
   local a, b, c = posix.wait(self.cpid)
   if nil == a then self.status = 'error'; return nil, b, c end
   if 'running' == b then return false end
-  print('done ', a, b, c)
   self.rc = c; self.status = b; return true
 end)
 
@@ -137,11 +130,7 @@ end)
 
 -- read stdin and close it, returning the return code
 local function rclose(r)
-  print('closing ', r, type(r))
-  if 'number' == type(r) then
-    print('closing number', r)
-    assert(false)
-  end
+  if 'number' == type(r) then assert(false) end
   return r:read('*a'), select(3, r:close())
 end
 
@@ -149,6 +138,6 @@ return {
   Fork=Fork,
   Pipes=Pipes,
   Pipe=Pipe,
-  sleep=sleep,
+  sleep=sleep, epoch=epoch,
   std_r, std_w, std_lw,
 }

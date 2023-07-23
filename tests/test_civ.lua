@@ -10,6 +10,17 @@ civ.assertEq(s:union(s2), civ.Set{'b', 'c'})
 civ.assertGlobals(g)
 civ:grequire(); g = globals()
 
+test("util", nil, function()
+  local t1 = {1, 2}
+  local t2 = {3, 4}
+  t1.a = t2
+  local r = deepcopy(t1)
+  assert(r[1] == 1)
+  assert(r.a[1] == 3)
+  t2[1] = 8
+  assert(r.a[1] == 3)
+end)
+
 test("str", nil, function()
   assertEq("12 34 56", strinsert("1256", 2, " 34 "))
   assertEq("78 1256", strinsert("1256", 0, "78 "))
@@ -47,6 +58,15 @@ test('set', nil, function()
 
   local l = sort(List.fromIter(s:iter()))
   assertEq(List{'a', 'b', 'c'}, l)
+end)
+
+test('map', nil, function()
+  local m = Map{}
+  m['a'] = 'b'; m['b'] = Map{}
+  assertEq(Map{}, m:getPath{'b'})
+  m:setPath({'b', 'c'}, 42)
+  assertEq(Map{c=42}, m['b'])
+  assertEq(42,        m:getPath{'b', 'c'})
 end)
 
 test('list', nil, function()
@@ -223,6 +243,20 @@ three | 1
 
 end)
 
+test('LL', nil, function()
+  local ll = LL(); assert(ll:isEmpty())
+  ll:addFront(42); assertEq(42, ll:popBack())
+  ll:addFront(46); assertEq(46, ll:popBack())
+  assert(ll:isEmpty())
+  ll:addFront(42);        ll:addFront(46);
+  assertEq(46, ll.front.v);         assertEq(42, ll.back.v)
+  assertEq(ll.front, ll.back.prev); assertEq(ll.back, ll.front.nxt)
+  assertEq(nil, ll.front.prev);     assertEq(nil, ll.back.nxt)
+  assertEq(42, ll:popBack()) assertEq(46, ll:popBack())
+  assert(ll:isEmpty())
+  assertEq(nil, ll:popBack())
+end)
+
 test('time', nil, function()
   local N = Duration.NANO
   local d = Duration(3, 500)
@@ -233,6 +267,12 @@ test('time', nil, function()
   assert(Duration(2) < Duration(3))
   assert(Duration(2) < Duration(2, 100))
   assert(not (Duration(2) < Duration(2)))
+  assertEq(Duration(1.5), Duration(1, N * 0.5))
+
+  assertEq(Epoch(1) - Duration(1), Epoch(0))
+  assertEq(Epoch(1) - Epoch(0), Duration(1))
+  local e = Epoch(1000001, 12342)
+  assertEq(e - Epoch(1000000, 12342), Duration(1))
 end)
 
 assertGlobals(g)
