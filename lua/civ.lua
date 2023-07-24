@@ -40,6 +40,13 @@ local function iterarr(l)
   end
 end
 
+local function iterValues(l)
+  local i = 0
+  return function()
+    i = i + 1; if i <= #l then return l[i], i end
+  end
+end
+
 local function concat(t, sep)
   local s = {}; for i, v in ipairs(t) do s[i] = tostring(v) end
   return table.concat(s, sep)
@@ -413,6 +420,7 @@ end)
 method(List, '__pairs',  ipairs)
 method(List, 'iter',   ipairs)
 method(List, 'iterFn', iterarr)
+method(List, 'iterValues', iterValues)
 
 result = List{5, 6}; assert(5 == result[1])
 result:extend{3, 4}; assert(4 == result[4])
