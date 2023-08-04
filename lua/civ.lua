@@ -5,6 +5,7 @@ local civ = {}
 
 -- ###################
 -- # Utility Functions
+local add = table.insert
 
 local function identity(v) return v end
 civ.max = function(a, b) if a > b then return a end return b end
@@ -457,7 +458,7 @@ end)
 -- tfmt and tfmtBuf are ultra-simple implementations of table formatting
 -- that do NOT use __tostring or __name.
 local function tfmtBuf(b, t)
-  if type(t) ~= 'table' then return tostring(t) end
+  if type(t) ~= 'table' then return add(b, tostring(t)) end
   table.insert(b, '{'); local added = 0
   for i, v in ipairs(t) do
     add(b, v); add(b, '; ');
@@ -465,11 +466,11 @@ local function tfmtBuf(b, t)
   end
   if added > 0 then b[#b] = ' :: ' end
   for k, v in pairs(t) do
-    if type(k) == 'number' and k <= #t then -- already concat
+    if type(k) == 'number' and k <= added then -- already added
     else
-      added = added + 1
       tfmtBuf(b, k); add(b, '=')
       tfmtBuf(b, v); add(b, '; ')
+      added = added + 1
     end
   end
   b[#b + ((added == 0 and 1) or 0)] = '}'

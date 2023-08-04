@@ -15,6 +15,8 @@ local SET = {
 local civ = require'civ'
 local shix = require'shix'
 
+local add, concat = table.insert, table.concat
+
 local ShSet = civ.struct('ShSet', {
   {'check', Bool, true},  -- check the rc
   {'inp',   Str,  false}, -- value to send to process input
