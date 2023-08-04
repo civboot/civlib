@@ -113,7 +113,7 @@ local function fmtString(s)
 end
 
 -- __index function for only getting methods
-local function _methIndex(self, k)
+local function methIndex(self, k)
   return getmetatable(self)[k]
 end
 
@@ -288,7 +288,7 @@ local Map = newTy('Map')
 constructor(Map,  function(ty_, t)
   return setmetatable(t, ty_)
 end)
-method(Map, '__index', _methIndex)
+method(Map, '__index', methIndex)
 -- get a value. If vFn is given it will be called to
 -- set the value (and return it)
 method(Map, 'empty', function() return Map{} end)
@@ -357,7 +357,7 @@ constructor(Set, function(ty, t)
   for _, key in pairs(t) do s[key] = key end
   return setmetatable(s, ty)
 end)
-method(Set, '__index',    _methIndex)
+method(Set, '__index',    methIndex)
 method(Set, 'asSorted', function(self)
   local l = List{}
   for k in pairs(self) do l:add(k) end
@@ -399,7 +399,7 @@ constructor(List, function(ty, t)
   return setmetatable(t, ty)
 end)
 method(List, 'empty', function() return List{} end)
-method(List, '__index', _methIndex)
+method(List, '__index', methIndex)
 method(List, 'add', table.insert)
 method(List, 'pop', table.remove)
 method(List, 'extend', extend)
@@ -426,7 +426,7 @@ result = List{5, 6}; assert(5 == result[1])
 result:extend{3, 4}; assert(4 == result[4])
 
 civ.LL = newTy('LL')
-civ.LL.__index = _methIndex
+civ.LL.__index = methIndex
 constructor(civ.LL, function(ty_)
   return setmetatable({}, LL)
 end)
@@ -453,6 +453,29 @@ end)
 -- # Formatting
 -- lua cannot format raw tables. We fix that, and also build up
 -- for formatting structs/etc
+
+-- tfmt and tfmtBuf are ultra-simple implementations of table formatting
+-- that do NOT use __tostring or __name.
+local function tfmtBuf(b, t)
+  if type(t) ~= 'table' then return tostring(t) end
+  table.insert(b, '{'); local added = 0
+  for i, v in ipairs(t) do
+    add(b, v); add(b, '; ');
+    added = added + 1
+  end
+  if added > 0 then b[#b] = ' :: ' end
+  for k, v in pairs(t) do
+    if type(k) == 'number' and k <= #t then -- already concat
+    else
+      added = added + 1
+      tfmtBuf(b, k); add(b, '=')
+      tfmtBuf(b, v); add(b, '; ')
+    end
+  end
+  b[#b + ((added == 0 and 1) or 0)] = '}'
+end
+civ.tfmt = function(t) local b = {}; tfmtBuf(b, t); return table.concat(b) end
+
 local fmtBuf = nil
 
 local function fmtTableIndent(b, t, keys)
@@ -528,7 +551,7 @@ constructor(Fmt, function(ty_, obj, indent)
   fmtBuf(b, obj)
   return setmetatable(b, ty_)
 end)
-method(Fmt, '__index', _methIndex)
+method(Fmt, '__index', methIndex)
 method(Fmt, 'pretty', function(obj) return Fmt(obj, '  ') end)
 method(Fmt, 'write', function(self, f)
   for _, v in ipairs(self) do f:write(tostring(v)) end
@@ -1374,6 +1397,10 @@ update(civ, {
   genStruct = genStruct,
   orderedKeys = orderedKeys,
   Display = Display,
+
+  -- newTy
+  newTy = newTy,
+  methIndex = methIndex,
 
   -- Picker
   Picker = Picker,

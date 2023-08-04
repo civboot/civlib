@@ -31,7 +31,6 @@ civ.method(Pipe, 'read', function(self, m)
   if('a' == m or 'a*' == m) then
     local t = {};
     while true do
-      io.stderr:write('reading ', self.fd, '\n')
       i = i + 1
       local s, err = posix.read(self.fd, 1024)
       if nil == s then return nil, err end

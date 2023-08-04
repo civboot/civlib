@@ -47,8 +47,6 @@ local ShResult = civ.struct('ShResult', {
   {'fork', shix.Fork, false},
 })
 
-local add, concat = table.insert, table.concat
-
 local function extend(t, a)
   for _, v in ipairs(a) do add(t, v) end
 end
@@ -62,23 +60,6 @@ end
 local function tcopy(t)
   local o = {}; for k, v in pairs(t) do o[k] = v end
   return o
-end
-
-local function tfmt(t)
-  if type(t) ~= 'table' then return tostring(t) end
-  local out = {'{'}; for i, v in ipairs(t) do
-    add(out, v); add(out, '; ');
-  end
-  if #out > 1 then out[#out] = ' :: ' end
-  for k, v in pairs(t) do
-    if type(k) == 'number' and k <= #t then -- already concat
-    else
-      extend(out, {tostring(k), '=', tfmt(v), '; '})
-    end
-    local lastI = 0
-  end
-  out[#out] = '}'
-  return concat(out, '')
 end
 
 local function asStr(v)
@@ -156,7 +137,6 @@ local function _sh(cmd, set, err)
     end
     if set.fork then res.fork = f
     else
-      print('pipes.r', f.pipes.r)
       res.out = f.pipes.r:read('a')
       if set.err then res.err = f.pipes.lr:read('a') end
       while not f:wait() do shix.sleep(0.05) end
