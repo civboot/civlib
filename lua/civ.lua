@@ -1,4 +1,3 @@
-
 local CIV = {checkField = false}
 
 local civ = {}
@@ -10,6 +9,20 @@ local add = table.insert
 local function identity(v) return v end
 civ.max = function(a, b) if a > b then return a end return b end
 civ.min = function(a, b) if a < b then return a end return b end
+civ.bound = function(v, min, max)
+  if v > max then return max end
+  if v < min then return min end
+  return v
+end
+civ.sort2 = function(a, b)
+  if a <= b then return a, b end
+  return b, a
+end
+civ.decAbs = function(v)
+  if v == 0 then return 0 end
+  return ((v > 0) and v - 1) or v + 1
+end
+civ.strLast = function(s) return s:sub(#s, #s) end
 
 -- return keys array
 local function keysarr(t)
@@ -41,7 +54,7 @@ local function iterarr(l)
   end
 end
 
-local function iterValues(l)
+local function iterV(l)
   local i = 0
   return function()
     i = i + 1; if i <= #l then return l[i], i end
@@ -65,13 +78,12 @@ local function keysIter(t)
 end
 
 -- return the first i characters and the remainder
-civ.strsplit = function(s, i)
+civ.strdivide = function(s, i)
   return string.sub(s, 1, i), string.sub(s, i+1)
 end
 civ.strinsert = function (s, i, v)
   return string.sub(s, 1, i) .. v .. string.sub(s, i+1)
 end
-
 local function deepcopy(t)
   local out = {}; for k, v in pairs(t) do
     if 'table' == type(v) then v = deepcopy(v) end
@@ -91,9 +103,17 @@ local function copy(t, add)
 end
 
 -- update is for dict/set, extend for list
-local function update (t, add) for k, v in pairs(add) do t[k] = v end end
+local function update  (t, add) for k, v in pairs(add) do t[k] = v end end
+civ.updateFields = function(t, add, fields)
+  for _, f in ipairs(fields) do t[f] = add[f] end
+end
 local function extend (a, vals)
   for _, v in ipairs(vals) do table.insert(a, v) end
+end
+civ.indexOf = function(t, v)
+  for i, tv in ipairs(t) do
+    if tv == v then return i end
+  end
 end
 
 local _tyName = {
@@ -125,6 +145,12 @@ local function _tyIndex(self, k)
   if v then  return v  end
   k = ('table' == type(k) and k) or tostring(k)
   error("Unknown member: " .. tyName(self) .. "." .. k)
+end
+
+-- tyIndex but allows new integer values
+civ.listIndex = function(self, k)
+  if 'number' == type(k) then return nil end
+  return _tyIndex(self, k)
 end
 
 local Set = nil
@@ -219,6 +245,9 @@ local function constructor(ty, fn)
   getmetatable(ty).__call = fn
 end
 local function method(ty, name, fn) ty[name] = fn  end
+civ.methods = function(ty, m)
+  for name, fn in pairs(m) do method(ty, name, fn) end
+end
 
 -- Iter: iterator subtype, traverses indexed table.
 local Iter = newTy('Iter')
@@ -413,15 +442,22 @@ method(List, 'drain', function(self, len)
   end; return l
 end)
 method(List, 'asSorted', sort)
+-- from a normal (index,value) iterator
 method(List, 'fromIter', function(...)
   local l = List{}
   for i, v in ... do l:add(v) end
   return l
 end)
+-- from an iterator that outputs values
+method(List, 'fromIterV', function(...)
+  local l = List{}
+  for v in ... do l:add(v) end
+  return l
+end)
 method(List, '__pairs',  ipairs)
 method(List, 'iter',   ipairs)
 method(List, 'iterFn', iterarr)
-method(List, 'iterValues', iterValues)
+method(List, 'iterV', iterV)
 
 result = List{5, 6}; assert(5 == result[1])
 result:extend{3, 4}; assert(4 == result[4])
@@ -440,6 +476,13 @@ method(civ.LL, 'addFront', function(self, v)
   if self.front then self.front.prev = a end
   self.front = a
   if not self.back then self.back = self.front end
+end)
+method(civ.LL, 'addBack', function(self, v)
+  if nil == v then return end
+  local a = {v=v, nxt=nil, prev=self.back}
+  if self.back then self.back.nxt = a end
+  self.back = a
+  if not self.front then self.front = self.back end
 end)
 method(civ.LL, 'popBack', function(self)
   local o = self.back; if o == nil then return end
@@ -461,7 +504,7 @@ local function tfmtBuf(b, t)
   if type(t) ~= 'table' then return add(b, tostring(t)) end
   table.insert(b, '{'); local added = 0
   for i, v in ipairs(t) do
-    add(b, v); add(b, '; ');
+    tfmtBuf(b, v); add(b, '; ');
     added = added + 1
   end
   if added > 0 then b[#b] = ' :: ' end
@@ -475,7 +518,31 @@ local function tfmtBuf(b, t)
   end
   b[#b + ((added == 0 and 1) or 0)] = '}'
 end
-civ.tfmt = function(t) local b = {}; tfmtBuf(b, t); return table.concat(b) end
+local function tfmt(t)
+  local b = {}; tfmtBuf(b, t); return table.concat(b)
+end; civ.tfmt = tfmt
+
+-- Return the tostring function for the type
+-- or nil if it's a table without __tostring
+local function getToString(v)
+  if type(v) ~= 'table' then return tostring end
+  local mt = getmetatable(v)
+  return (mt and (mt.__tostring))
+end; civ.getToString = getToString
+
+local function toString(v)
+  local to = getToString(v); if to then return to(v) end
+  return tfmt(v)
+end; civ.toString = toString
+
+-- print function that respects io.stdout and uses tfmt for tables
+local function pnt(...)
+  local args = {...}
+  for i, arg in ipairs(args) do
+    io.stdout:write(tostring(arg))
+    if i < #args then io.stdout:write('\t') end
+  end; io.stdout:write('\n')
+end; civ.pnt = pnt
 
 local fmtBuf = nil
 
@@ -574,7 +641,6 @@ end)
 result = Set{'a', 'b', 'c'}; assert("{a b c}"   == tostring(result))
 result:add('d');             assert("{a b c d}" == tostring(result))
 
--- List.__tostring
 method(List, '__tostring', function(self)
   local b, endAdd = {'['}, 1
   for _, v in ipairs(self) do
@@ -733,9 +799,9 @@ local function pathTy(st, path)
   return st
 end
 
-local function lines(text)
-  return string.gmatch(text, '[^\n]*')
-end
+local function split(text) return text:gmatch'%S+'    end
+local function lines(text) return text:gmatch'[^\n]*' end
+
 local function matches(text, m)
   local out = {}; for v in string.gmatch(text, m) do
     table.insert(out, v) end
@@ -816,6 +882,7 @@ local function fillBuf(b, num, filler)
   while num >= 6 do table.insert(b, filler[6]);  num = num - 6 end
   while num >= 3 do table.insert(b, filler[3]);  num = num - 3 end
   while num >= 1 do table.insert(b, filler[1]);  num = num - 1 end
+  return b
 end
 
 local DisplayCell = struct('DisplayCell',
@@ -1380,7 +1447,7 @@ update(civ, {
   copy = copy, eq = eq,
   update = update, extend = extend,  -- table (map)
   sort = sort,                       -- table (list)
-  lines = lines, trim = trim,        -- string
+  split = split, lines = lines, trim = trim,        -- string
   matches = matches,
 
   -- Formatters

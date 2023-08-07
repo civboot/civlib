@@ -11,21 +11,28 @@ civ.assertGlobals(g)
 civ:grequire(); g = globals()
 
 test("util", nil, function()
-  local t1 = {1, 2}
-  local t2 = {3, 4}
+  local t1, t2 = {1, 2}, {3, 4}
+  assert(1 == indexOf(t2, 3)); assert(2 == indexOf(t2, 4))
+
   t1.a = t2
   local r = deepcopy(t1)
   assert(r[1] == 1)
   assert(r.a[1] == 3)
   t2[1] = 8
   assert(r.a[1] == 3)
+
+  assert(0, decAbs(1)); assert(0, decAbs(-1))
+  assert('a', strLast('cba'))
+  assert(tostring == getToString(4))
+  assert(nil == getToString({}))
+  assert(List.__tostring == getToString(List{}))
 end)
 
 test("str", nil, function()
   assertEq("12 34 56", strinsert("1256", 2, " 34 "))
   assertEq("78 1256", strinsert("1256", 0, "78 "))
   assertEq("1256 78", strinsert("1256", 4, " 78"))
-  local a, b = strsplit('12345', 3)
+  local a, b = strdivide('12345', 3)
   assertEq(a, '123'); assertEq(b, '45')
 end)
 
@@ -149,11 +156,13 @@ test('display', nil, function()
   assertEq('foo bar', trim('\n  \nfoo bar \n'))
 
   -- test lines function
-  local l = List{}
-  for line in lines("hi there\nbob\n") do
-    l:add(line)
-  end
+  local l = List.fromIterV(lines("hi there\nbob\n"))
   assertEq(List{"hi there", "bob", ""}, l)
+  -- split function
+  local l = List.fromIterV(split("hi there\nbob\n"))
+  assertEq(List{"hi", "there", "bob"}, l)
+
+  -- test split function
 
   -- fillBuf
   local b = List{}; fillBuf(b, 5)
@@ -255,6 +264,9 @@ test('LL', nil, function()
   assertEq(42, ll:popBack()) assertEq(46, ll:popBack())
   assert(ll:isEmpty())
   assertEq(nil, ll:popBack())
+  ll:addFront(42);        ll:addFront(46);   ll:addBack(41)
+  assertEq(41, ll.back.v); assertEq(46, ll.front.v)
+  assertEq(42, ll.front.nxt.v);  assertEq(42, ll.back.prev.v);
 end)
 
 test('time', nil, function()
