@@ -34,6 +34,7 @@ test("str", nil, function()
   assertEq("1256 78", strinsert("1256", 4, " 78"))
   local a, b = strdivide('12345', 3)
   assertEq(a, '123'); assertEq(b, '45')
+  assertEq({'1', ' ', 'a', 'c'}, explode'1 ac')
 end)
 
 test("fmt", nil, function()

@@ -39,6 +39,12 @@ local function iterpairs(t)
     end
   end
 end
+
+local function explode(s)
+  local t = {}; for ch in s:gmatch('.') do add(t, ch) end
+  return t
+end; civ.explode = explode
+
 -- Mutating map function.
 -- Modifies the table in-place using the function
 local function map(t, fn)
@@ -65,8 +71,12 @@ local function concat(t, sep)
   local s = {}; for i, v in ipairs(t) do s[i] = tostring(v) end
   return table.concat(s, sep)
 end
-local function sort(t) table.sort(t); return t end
-local function orderedKeys(t) return iterarr(sort(keysarr(t))) end
+local function keyorder(a, b)
+  if type(a) == type(b) then return a < b
+  else return type(a) < type(b) end
+end
+local function sort(t, fn) table.sort(t, fn); return t end
+local function orderedKeys(t) return iterarr(sort(keysarr(t), keyorder)) end
 
 -- return as the index (first value) from an iterator when there is no index
 local NoIndex = setmetatable({}, {__name='NoIndex'})
@@ -104,8 +114,8 @@ end
 
 -- update is for dict/set, extend for list
 local function update  (t, add) for k, v in pairs(add) do t[k] = v end end
-civ.updateFields = function(t, add, fields)
-  for _, f in ipairs(fields) do t[f] = add[f] end
+civ.updateKeys = function(t, add, keys)
+  for _, k in ipairs(keys) do t[k] = add[k] end
 end
 local function extend (a, vals)
   for _, v in ipairs(vals) do table.insert(a, v) end
@@ -539,9 +549,10 @@ end; civ.toString = toString
 local function pnt(...)
   local args = {...}
   for i, arg in ipairs(args) do
-    io.stdout:write(tostring(arg))
+    io.stdout:write(toString(arg))
     if i < #args then io.stdout:write('\t') end
   end; io.stdout:write('\n')
+  io.stdout:flush()
 end; civ.pnt = pnt
 
 local fmtBuf = nil
@@ -728,20 +739,6 @@ local function eqArr(a, b)
 end
 method(List, '__eq', eqArr)
 
-local function assertEq(left, right)
-  if eq(left, right) then return end
-  err = {}
-  fmtBuf(err, "Values not equal:")
-  fmtBuf(err, "\n   left: "); fmtBuf(err, left)
-  fmtBuf(err, "\n  right: "); fmtBuf(err, right)
-  error(concat(err))
-end
-
-local result = List{1, 'a', 2}
-assertEq(List{1, 'a', 2},   result)
-assert  (List{1, 'a', 2} == result)
-assert  (List{2, 'a', 2} ~= result)
-
 -- ###################
 -- # Struct
 
@@ -802,6 +799,42 @@ end
 local function split(text) return text:gmatch'%S+'    end
 local function lines(text) return text:gmatch'[^\n]*' end
 
+local function findLine(lines, i, line)
+  while i < #lines do
+    if lines[i] == line then return i end
+    i = i + 1
+  end
+end
+
+local function strDiffPlace(sL, sR)
+  local i, sL, sR = 1, explode(sL), explode(sR)
+  while i <= #sL and i <= #sR do
+    print('s i', i, sL[i], sR[i])
+    if sL[i] ~= sR[i] then return i end
+    i = i + 1
+  end
+  if #sL < #sR then return #sL + 1 end
+  if #sR < #sL then return #sR + 1 end
+  return nil
+end; civ.strDiffPlace = strDiffPlace
+
+-- return the l, c where there is a difference
+local function linesDiffPlace(linesL, linesR)
+  local i = 1
+  while i <= #linesL and i <= #linesR do
+    local lL, lR = linesL[i], linesR[i]
+    print('linesDiff', i, iL, iR)
+    if lL ~= lR then
+      return i, assert(strDiffPlace(lL, lR))
+    end
+    i = i + 1
+  end
+  if #linesL < #linesR then return #linesL + 1, 1 end
+  if #linesR < #linesL then return #linesR + 1, 1 end
+  return nil
+end; civ.linesDiffPlace = linesDiffPlace
+
+
 local function matches(text, m)
   local out = {}; for v in string.gmatch(text, m) do
     table.insert(out, v) end
@@ -854,19 +887,6 @@ constructor(struct, function(ty_, name, fields)
   return st
 end)
 
--- ###################
--- # File Helpers
-local function readAll(path)
-  local f = io.open(path, 'r')
-  local out = f:read('a'); f:close()
-  return out
-end
-
--- ###################
--- # Picker / Query
--- Picker is an ergonomic way to query over a list of structs
--- while using struct indexes
-
 local BufFillerWs = {
   [6] = '      ', [3] = '   ', [1] = ' ',
 }
@@ -884,6 +904,60 @@ local function fillBuf(b, num, filler)
   while num >= 1 do table.insert(b, filler[1]);  num = num - 1 end
   return b
 end
+
+local function fmtStringDiff(sL, sR)
+  local linesL = List.fromIterV(lines(sL))
+  local linesR = List.fromIterV(lines(sR))
+  local l, c = linesDiffPlace(linesL, linesR)
+  assert(l); assert(c)
+  local b = {string.format("## Difference line=%q (", l)}
+  add(b, string.format('lines[%q == %q]', #linesL, #linesR))
+  add(b, string.format(' strlen[%q == %q])\n', #sL, #sR))
+  add(b, ' left: '); add(b, linesL[l]); add(b, '\n')
+  add(b, 'right: '); add(b, linesR[l]); add(b, '\n')
+  fillBuf(b, c - 1 + 7);
+  add(b, string.format('^ (column %q)\n', c))
+  add(b, '####(end diff)\n')
+  return table.concat(b)
+end
+
+local function assertEq(left, right)
+  if eq(left, right) then return end
+  err = {}
+  if type(left) == 'string' and type(right) == 'string' then
+    fmtBuf(fmtStringDiff(left, right))
+  else
+    fmtBuf(err, "Values not equal:")
+    fmtBuf(err, "\n   left: "); fmtBuf(err, left)
+    fmtBuf(err, "\n  right: "); fmtBuf(err, right)
+  end
+  error(concat(err))
+end
+
+local result = List{1, 'a', 2}
+assertEq(List{1, 'a', 2},   result)
+assert  (List{1, 'a', 2} == result)
+assert  (List{2, 'a', 2} ~= result)
+assert([[
+## Difference line=2 (lines[2 == 2] strlen[7 == 7])
+ left: 123
+right: 12d
+         ^ (column 3)
+####(end diff)
+]] == fmtStringDiff('abc\n123', 'abc\n12d'))
+
+-- ###################
+-- # File Helpers
+local function readAll(path)
+  local f = io.open(path, 'r')
+  local out = f:read('a'); f:close()
+  return out
+end
+
+-- ###################
+-- # Picker / Query
+-- Picker is an ergonomic way to query over a list of structs
+-- while using struct indexes
 
 local DisplayCell = struct('DisplayCell',
   {{'lines', List}, {'width', Int}})
