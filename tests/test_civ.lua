@@ -26,6 +26,22 @@ test("util", nil, function()
   assert(tostring == getToString(4))
   assert(nil == getToString({}))
   assert(List.__tostring == getToString(List{}))
+
+  local t = {a=8, b=9}
+  assert(8 == pop(t, 'a')) assert(9 == pop(t, 'b'))
+  assert(0 == #t)
+end)
+
+test("eval", nil, function()
+  local env = {}
+  local ok, err = eval('1+', env)
+  assert(not ok); assert(err)
+  local ok, three = eval('return 3', env)
+  assert(ok); assertEq({}, env)
+  assertEq(3, three)
+  local ok, three = eval('seven = 7', env)
+  assert(ok); assertEq({seven=7}, env)
+  assert(not seven) -- did not modify globals
 end)
 
 test("str", nil, function()

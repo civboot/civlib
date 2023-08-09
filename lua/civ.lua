@@ -23,6 +23,23 @@ civ.decAbs = function(v)
   return ((v > 0) and v - 1) or v + 1
 end
 civ.strLast = function(s) return s:sub(#s, #s) end
+civ.callerSource = function()
+  local info = debug.getinfo(3)
+  return string.format('%s:%s', info.source, info.currentline)
+end
+
+-- evaluate some lua code
+-- returns ok, ... where ... is either the error or the result of calling
+-- OR compiling the lua code.
+--
+-- The env is modified with any 'upvalues' (aka globals) from the source.
+civ.eval = function(s, env, name)
+  assert(type(s) == 'string'); assert(type(env) == 'table')
+  name = name or civ.callerSource()
+  local e, err = load(s, name, 't', env)
+  if err then return false, err end
+  return pcall(e)
+end
 
 -- return keys array
 local function keysarr(t)
@@ -113,13 +130,14 @@ local function copy(t, add)
 end
 
 -- update is for dict/set, extend for list
-local function update  (t, add) for k, v in pairs(add) do t[k] = v end end
+local function update(t, add) for k, v in pairs(add) do t[k] = v end end
 civ.updateKeys = function(t, add, keys)
   for _, k in ipairs(keys) do t[k] = add[k] end
 end
-local function extend (a, vals)
+local function extend(a, vals)
   for _, v in ipairs(vals) do table.insert(a, v) end
 end
+local function pop(t, k) local v = t[k]; t[k] = nil; return v end
 civ.indexOf = function(t, v)
   for i, tv in ipairs(t) do
     if tv == v then return i end
@@ -151,8 +169,8 @@ end
 -- __index function used for most types
 local function _tyIndex(self, k)
   local ty = getmetatable(self)
-  local v = ty["#defaults"][k] or ty[k]
-  if v then  return v  end
+  local v = ty["#defaults"][k]; if v == nil then v = ty[k] end
+  if v ~= nil then  return v  end
   k = ('table' == type(k) and k) or tostring(k)
   error("Unknown member: " .. tyName(self) .. "." .. k)
 end
@@ -905,14 +923,14 @@ local function fillBuf(b, num, filler)
   return b
 end
 
-local function fmtStringDiff(sL, sR)
+local function fmtStringDiffBuf(b, sL, sR)
   local linesL = List.fromIterV(lines(sL))
   local linesR = List.fromIterV(lines(sR))
   local l, c = linesDiffPlace(linesL, linesR)
   assert(l); assert(c)
-  local b = {string.format("## Difference line=%q (", l)}
-  add(b, string.format('lines[%q == %q]', #linesL, #linesR))
-  add(b, string.format(' strlen[%q == %q])\n', #sL, #sR))
+  add(b, string.format("## Difference line=%q (", l))
+  add(b, string.format('lines[%q|%q]', #linesL, #linesR))
+  add(b, string.format(' strlen[%q|%q])\n', #sL, #sR))
   add(b, ' left: '); add(b, linesL[l]); add(b, '\n')
   add(b, 'right: '); add(b, linesR[l]); add(b, '\n')
   fillBuf(b, c - 1 + 7);
@@ -920,16 +938,18 @@ local function fmtStringDiff(sL, sR)
   add(b, '####(end diff)\n')
   return table.concat(b)
 end
+local function fmtStringDiff(sL, sR)
+  return fmtStringDiffBuf({}, sL, sR)
+end
 
 local function assertEq(left, right)
   if eq(left, right) then return end
   err = {}
+  fmtBuf(err, "Values not equal:")
+  fmtBuf(err, "\n   left: "); fmtBuf(err, left)
+  fmtBuf(err, "\n  right: "); fmtBuf(err, right)
   if type(left) == 'string' and type(right) == 'string' then
-    fmtBuf(fmtStringDiff(left, right))
-  else
-    fmtBuf(err, "Values not equal:")
-    fmtBuf(err, "\n   left: "); fmtBuf(err, left)
-    fmtBuf(err, "\n  right: "); fmtBuf(err, right)
+    fmtStringDiffBuf(err, left, right)
   end
   error(concat(err))
 end
@@ -939,7 +959,7 @@ assertEq(List{1, 'a', 2},   result)
 assert  (List{1, 'a', 2} == result)
 assert  (List{2, 'a', 2} ~= result)
 assert([[
-## Difference line=2 (lines[2 == 2] strlen[7 == 7])
+## Difference line=2 (lines[2|2] strlen[7|7])
  left: 123
 right: 12d
          ^ (column 3)
@@ -1519,8 +1539,8 @@ update(civ, {
 
   -- Generic operations
   copy = copy, eq = eq,
-  update = update, extend = extend,  -- table (map)
-  sort = sort,                       -- table (list)
+  update = update, extend = extend, pop = pop, -- table (map)
+  sort = sort, -- table (list)
   split = split, lines = lines, trim = trim,        -- string
   matches = matches,
 
