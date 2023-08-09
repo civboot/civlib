@@ -7,12 +7,17 @@ local civ = {}
 local add = table.insert
 
 local function identity(v) return v end
+civ.noop = function() end
+civ.noopFn = function() return noop end
 civ.max = function(a, b) if a > b then return a end return b end
 civ.min = function(a, b) if a < b then return a end return b end
 civ.bound = function(v, min, max)
   if v > max then return max end
   if v < min then return min end
   return v
+end
+civ.within = function(v, min, max)
+  return (min <= v) and (v <= max)
 end
 civ.sort2 = function(a, b)
   if a <= b then return a, b end
@@ -109,7 +114,7 @@ civ.strdivide = function(s, i)
   return string.sub(s, 1, i), string.sub(s, i+1)
 end
 civ.strinsert = function (s, i, v)
-  return string.sub(s, 1, i) .. v .. string.sub(s, i+1)
+  return string.sub(s, 1, i-1) .. v .. string.sub(s, i)
 end
 local function deepcopy(t)
   local out = {}; for k, v in pairs(t) do
@@ -172,6 +177,8 @@ local function _tyIndex(self, k)
   local v = ty["#defaults"][k]; if v == nil then v = ty[k] end
   if v ~= nil then  return v  end
   k = ('table' == type(k) and k) or tostring(k)
+  -- TODO: sometimes used by ipairs, figure out how to disable
+  if k == 1 then return nil end
   error("Unknown member: " .. tyName(self) .. "." .. k)
 end
 
@@ -530,7 +537,7 @@ end)
 -- that do NOT use __tostring or __name.
 local function tfmtBuf(b, t)
   if type(t) ~= 'table' then return add(b, tostring(t)) end
-  table.insert(b, '{'); local added = 0
+  add(b, '{'); local added = 0
   for i, v in ipairs(t) do
     tfmtBuf(b, v); add(b, '; ');
     added = added + 1
@@ -769,6 +776,8 @@ local function structIndex (t, k)
   local v = mt["#defaults"][k]
   if v ~= nil then return v end
   v = mt[k]; if v ~= nil then return v end
+  -- TODO: sometimes used by ipairs, figure out how to disable
+  if k == 1 then return nil end
   structInvalidField(getmetatable(t), k)
 end
 
@@ -945,9 +954,9 @@ end
 local function assertEq(left, right)
   if eq(left, right) then return end
   err = {}
-  fmtBuf(err, "Values not equal:")
-  fmtBuf(err, "\n   left: "); fmtBuf(err, left)
-  fmtBuf(err, "\n  right: "); fmtBuf(err, right)
+  add(err, "Values not equal:")
+  add(err, "\n   left: "); tfmtBuf(err, left)
+  add(err, "\n  right: "); tfmtBuf(err, right)
   if type(left) == 'string' and type(right) == 'string' then
     fmtStringDiffBuf(err, left, right)
   end
