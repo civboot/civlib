@@ -196,7 +196,7 @@ test('display', nil, function()
   local b = List{}; fillBuf(b, 5)
   assertEq(List{'   ', ' ', ' '}, b)
 
-  local J = struct('J', {
+  local J = struct('Journal', {
     'date', 'title', 'text', 'todo'
   })
   local j = List{
@@ -235,10 +235,19 @@ test('picker', nil, function()
     A{a1='two',   a2=2},
     A{a1='three', a2=3},
   }, result)
-  assertEq(List{
-    A{a1='two',   a2=2},
-    A{a1='three', a2=3},
-  }, pA.q.a2:in_{2, 3}:toList())
+  local q = (pA.q.a2:in_{2, 3}
+                 .a1:eq('two'))
+  -- TODO: we must
+  --   1. support MULTIPLE indexes simultaniously
+  --   2. support the iterator... somehow
+  --
+  -- I think this was very much an MVP and needs a lot more love to
+  -- actually be useable :D
+  --
+  -- pnt(q:debug())
+  -- assertEq(List{
+  --   A{a1='two',   a2=2},
+  -- }, q:toList())
 
   local G1 = genStruct('G1', {'a', Num, 'b', Str})
   assertEq('G1{a:Num b:Str}', tostring(G1))

@@ -221,7 +221,6 @@ local function newTy(name)
     __name=name,
     __index=_tyIndex,
     ["#civTy"]=true,
-    ["#methods"]={},
     ["#defaults"]={},
   }
   ALL_TYS[ty] = ty
@@ -987,6 +986,18 @@ end
 -- # Picker / Query
 -- Picker is an ergonomic way to query over a list of structs
 -- while using struct indexes
+--
+-- Example use:
+--   l = List{
+--     A{a1='one',   a2=1},
+--     A{a1='two',   a2=2},
+--     A{a1='three', a2=3},
+--   }
+--   p = Picker(A, l) -- construct the picker with the type.
+--
+--   -- `.q` creates a Query object. Here we filter/query by equality:
+--   oneOnly  = p.q.a1:eq('one') 
+--   twoThree = p.q.a2:in_{2, 3}.a1:eq('two')
 
 local DisplayCell = struct('DisplayCell',
   {{'lines', List}, {'width', Int}})
@@ -1104,6 +1115,11 @@ local Query = struct('Query', {
     -- path and ops are built-up by user
     {'#path', List}, {'#ops', List},
   })
+method(Query, 'debug', function(self)
+  return string.format(
+      'Query[%s %s %s]', rawget(self, '#ops'),
+      rawget(self, '#iNew'), rawget(self, '#iter'))
+end)
 local PathBuilder = struct('PathBuilder', {'#query'})
 local QueryOp = struct('Op',
   {{'name', Str}, {'path'}, {'value'}})
@@ -1232,6 +1248,7 @@ local function queryUseIndexes(query, idx)
   if not idx then return nil end
   local iNew = function() return idx:iterFn() end
   query['#iNew'], query['#i'] = iNew, idx:iterFn()
+  query['#path'] = List{}
   return query
 end
 
@@ -1240,6 +1257,7 @@ local normalEq = _queryOp('eq')
 method(Query, 'eq', function(self, value)
   assert(Query == ty(self))
   local idx = queryIndexes(self, 'eq', value, ty(value), isEq(value))
+  pnt('idx', idx)
   if idx then return queryUseIndexes(self, idx) end
   return normalEq(self, value)
 end)
@@ -1302,8 +1320,9 @@ end)
 --   q.path.lt.eq(3) -- lt less equal to 3
 local function buildQuery(query, field)
   local st = queryStruct(query)
-  st = pathTy(st, query['#path'])
-  if not st['#tys'][field] then error(
+  st = pathTy(st, rawget(query, '#path'))
+  local tys = assert(rawget(st, '#tys'), tfmt(st))
+  if not tys[field] then error(
     string.format("%s does not have field %s", st, field)
   )end
   query['#path']:add(field);
