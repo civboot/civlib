@@ -1,7 +1,7 @@
 require'civ':grequire(); local mod
 test('load', nil, function() mod = require('sh') end)
 local posix = require'posix'
-local shix  = require'shix'
+local shix  = require'civ.shix'
 
 local sh, shCmd, assertSh = mod.sh, mod.shCmd, mod.assertSh
 local tfmt = mod.tfmt

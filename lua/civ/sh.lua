@@ -13,7 +13,7 @@ local SET = {
 }
 
 local civ = require'civ'
-local shix = require'shix'
+local shix = require'civ.shix'
 
 local add, concat = table.insert, table.concat
 
