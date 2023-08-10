@@ -1,5 +1,4 @@
-civlib: civboot C library ([http://civboot.org](http://civboot.org))
-==================================================================
+# civlib: small libraries for Civboot
 
 civlib is a set of small libraries embodying Civboot's software design
 principles. It is primarily to bootstrap [fngi](https://github.com/civboot/fngi)
