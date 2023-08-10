@@ -16,7 +16,7 @@ test: lua build
 
 lua:
 	LUA_PATH=${LP} lua tests/test_civ.lua
-	# lua tests/test_sh.lua
+	LUA_PATH=${LP} lua tests/test_sh.lua
 
 build:
 	mkdir -p bin/

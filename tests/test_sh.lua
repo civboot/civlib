@@ -1,7 +1,7 @@
 require'civ':grequire(); local mod
-test('load', nil, function() mod = require('sh') end)
+test('load', nil, function() mod = require('civ.sh') end)
 local posix = require'posix'
-local shix  = require'civ.shix'
+local civix  = require'civ.unix'
 
 local sh, shCmd, assertSh = mod.sh, mod.shCmd, mod.assertSh
 local tfmt = mod.tfmt
@@ -24,7 +24,7 @@ test('embedded', nil, function()
 end)
 
 test('fork', nil, function()
-  local fork = shix.Fork(true, true)
+  local fork = civix.Fork(true, true)
   local p = fork.pipes
   assert(not p.lr and not p.lw)
   if not fork.isParent then
@@ -44,7 +44,7 @@ test('fork', nil, function()
 end)
 
 test('exec', nil, function()
-  local fork = shix.Fork(true)
+  local fork = civix.Fork(true)
   local p = fork.pipes
   assert(not (p.lr or p.lw))
   if not fork.isParent then

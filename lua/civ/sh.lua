@@ -13,7 +13,7 @@ local SET = {
 }
 
 local civ = require'civ'
-local shix = require'civ.shix'
+local civix = require'civ.unix'
 
 local add, concat = table.insert, table.concat
 
@@ -46,7 +46,7 @@ local ShResult = civ.struct('ShResult', {
 
   -- These can only be available when fork=true
   -- Note: fork.pipes will have the requested {r, w, lr}
-  {'fork', shix.Fork, false},
+  {'fork', civix.Fork, false},
 })
 
 local function extend(t, a)
@@ -123,13 +123,13 @@ local function _sh(cmd, set, err)
   end
 
   local res = ShResult{status='not-started'}
-  if not shix then
+  if not civix then
     assert(not (set.inp or set.fork or set.w or set.lr),
            'requires posix for: inp, fork, w, lr')
     local out, rc = luash(cmd)
     res = ShResult{out=out, rc=rc}
   else
-    local f = shix.Fork(true, set.w or set.inp, set.lr or set.err)
+    local f = civix.Fork(true, set.w or set.inp, set.lr or set.err)
     if not f.isParent then f:exec(cmd) end
     res.status = 'started'
     if set.inp then
@@ -141,7 +141,7 @@ local function _sh(cmd, set, err)
     else
       res.out = f.pipes.r:read('a')
       if set.err then res.err = f.pipes.lr:read('a') end
-      while not f:wait() do shix.sleep(0.05) end
+      while not f:wait() do civix.sleep(0.05) end
       res.rc = f.rc
     end
     res.status = f.status
