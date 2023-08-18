@@ -21,3 +21,9 @@ lua:
 build:
 	mkdir -p bin/
 	$(CC) $(FLAGS) -Isrc/ -Wall $(DISABLE_WARNINGS) $(FILES) -o $(OUT)
+
+installlocal:
+	luarocks make lua/rockspec --local
+
+uploadrock:
+	source ~/.secrets && luarocks upload lua/rockspec --api-key=${ROCKAPI}
