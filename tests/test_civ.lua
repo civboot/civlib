@@ -85,6 +85,7 @@ test("eq", nil, function()
 
   setmetatable(b, vTable)
   assert(a == b); assert(b == a)
+
 end)
 
 test('set', nil, function()
@@ -99,9 +100,9 @@ test('map', nil, function()
   local m = Map{}
   m['a'] = 'b'; m['b'] = Map{}
   assertEq(Map{}, m:getPath{'b'})
-  m:setPath({'b', 'c'}, 42)
-  assertEq(Map{c=42}, m['b'])
-  assertEq(42,        m:getPath{'b', 'c'})
+  m:setPath({'b', 'c', 'd'}, 42)
+  assertEq(Map{c=Map{d=42}}, m['b'])
+  assertEq(42,        m:getPath{'b', 'c', 'd'})
 end)
 
 test('list', nil, function()
@@ -112,6 +113,9 @@ test('list', nil, function()
   assertEq(List{'a', 'b', 'c'}, l)
   assertEq(List{'c'}, l:drain(1))
   assertEq(List{'a', 'b'}, l)
+
+  assertEq({2, 1}, reverse({1, 2}))
+  assertEq({3, 2, 1}, reverse({1, 2, 3}))
 end)
 
 

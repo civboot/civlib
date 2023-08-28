@@ -23,6 +23,13 @@ civ.sort2 = function(a, b)
   if a <= b then return a, b end
   return b, a
 end
+-- reverse a list-like table in-place
+civ.reverse = function(t)
+  local l = #t; for i=1, l/2 do
+    t[i], t[l-i+1] = t[l-i+1], t[i]
+  end
+  return t
+end
 civ.decAbs = function(v)
   if v == 0 then return 0 end
   return ((v > 0) and v - 1) or v + 1
@@ -33,11 +40,9 @@ civ.callerSource = function()
   return string.format('%s:%s', info.source, info.currentline)
 end
 
--- evaluate some lua code
--- returns ok, ... where ... is either the error or the result of calling
--- OR compiling the lua code.
+-- evaluate some lua code and call it with pcall.
 --
--- The env is modified with any 'upvalues' (aka globals) from the source.
+-- The return value is in the same structure as pcall: (isOk, <results or error>)
 civ.eval = function(s, env, name)
   assert(type(s) == 'string'); assert(type(env) == 'table')
   name = name or civ.callerSource()
@@ -372,6 +377,9 @@ method(Map, 'get', function(self, k, vFn)
   if vFn then v = vFn(self); self[k] = v end
   return v
 end)
+method(Map, 'pop', function(self, k)
+  local v = self[k]; self[k] = nil; return v
+end)
 method(Map, 'getPath', function(self, path, vFn)
   local d = self
   for i, k in ipairs(path) do
@@ -379,7 +387,7 @@ method(Map, 'getPath', function(self, path, vFn)
     if nxt then
     elseif vFn then
       nxt = vFn(d, i); d[k] = nxt
-    else error('path %s failed at i=%s', fmt(path), i) end
+    else return nil end
     d = nxt
   end
   return d
@@ -389,12 +397,10 @@ method(Map, 'setPath', function(self, path, value)
   assert(len > 0, 'empty path')
   for i, k in ipairs(path) do
     if i >= len then break end
-    d = self[k]
-    if not d then d = Map{}; self[k] = d end
+    d = d:get(k, Map.empty)
   end
   d[path[len]] = value
 end)
-
 method(Map, 'diff', function(self, r)
   local left = Map{}
   for k in pairs(self) do if r[k] == nil then left[k] = k end end
@@ -578,6 +584,8 @@ local function pnt(...)
   end; io.stdout:write('\n')
   io.stdout:flush()
 end; civ.pnt = pnt
+civ.pntf   = function(...) pnt(string.format(...))   end
+civ.errorf = function(...) error(string.format(...)) end
 
 local fmtBuf = nil
 
