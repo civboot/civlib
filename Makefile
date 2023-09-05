@@ -27,4 +27,4 @@ installlocal:
 	luarocks make lua/rockspec --local
 
 uploadrock:
-	source ~/.secrets && luarocks upload lua/rockspec --api-key=${ROCKAPI}
+	source ~/.secrets && luarocks upload lua/*.rockspec --api-key=${ROCKAPI}

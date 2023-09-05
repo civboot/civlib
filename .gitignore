@@ -1,3 +1,4 @@
 bin/
 kernel.c
 kernel.h
+*.src.rock
