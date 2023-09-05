@@ -843,7 +843,6 @@ end
 local function strDiffPlace(sL, sR)
   local i, sL, sR = 1, explode(sL), explode(sR)
   while i <= #sL and i <= #sR do
-    print('s i', i, sL[i], sR[i])
     if sL[i] ~= sR[i] then return i end
     i = i + 1
   end
@@ -857,7 +856,6 @@ local function linesDiffPlace(linesL, linesR)
   local i = 1
   while i <= #linesL and i <= #linesR do
     local lL, lR = linesL[i], linesR[i]
-    print('linesDiff', i, iL, iR)
     if lL ~= lR then
       return i, assert(strDiffPlace(lL, lR))
     end
@@ -898,8 +896,10 @@ end
 civ.structConstructor = function(st, t)
   for f, v in pairs(t) do
     local fTy = st["#tys"][f]
-    if not fTy then structInvalidField(st, f) end
-    if not tyCheck(fTy, ty(v)) then tyError(fTy, ty(v)) end
+    if not fTy then
+      if type(f) == 'number' and (st['#attr'] or {}).list then
+      else structInvalidField(st, f) end
+    elseif not tyCheck(fTy, ty(v)) then tyError(fTy, ty(v)) end
   end
   for f in pairs(st["#tys"]) do
     if nil == t[f] and nil == st["#defaults"][f] then
@@ -908,6 +908,7 @@ civ.structConstructor = function(st, t)
   end
   return setmetatable(t, st)
 end
+
 
 local struct = newTy('Struct')
 constructor(struct, function(ty_, name, fields)
@@ -1267,7 +1268,6 @@ local normalEq = _queryOp('eq')
 method(Query, 'eq', function(self, value)
   assert(Query == ty(self))
   local idx = queryIndexes(self, 'eq', value, ty(value), isEq(value))
-  pnt('idx', idx)
   if idx then return queryUseIndexes(self, idx) end
   return normalEq(self, value)
 end)
