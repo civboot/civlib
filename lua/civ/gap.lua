@@ -247,4 +247,6 @@ extend=function(g, s)
 end,
 }) -- END gap methods
 
+Gap.getLine = Gap.get
+
 return M

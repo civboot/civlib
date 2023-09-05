@@ -895,6 +895,20 @@ local function tyCheckPath(st, path, given)
   return req
 end
 
+civ.structConstructor = function(st, t)
+  for f, v in pairs(t) do
+    local fTy = st["#tys"][f]
+    if not fTy then structInvalidField(st, f) end
+    if not tyCheck(fTy, ty(v)) then tyError(fTy, ty(v)) end
+  end
+  for f in pairs(st["#tys"]) do
+    if nil == t[f] and nil == st["#defaults"][f] then
+      error("missing field: " .. f)
+    end
+  end
+  return setmetatable(t, st)
+end
+
 local struct = newTy('Struct')
 constructor(struct, function(ty_, name, fields)
   local st = newTy(name)
@@ -905,19 +919,7 @@ constructor(struct, function(ty_, name, fields)
     __index=structIndex, __newindex=structNewIndex,
     __tostring=structFmt,
   })
-  constructor(st, function(st, t)
-    for f, v in pairs(t) do
-      local fTy = st["#tys"][f]
-      if not fTy then structInvalidField(st, f) end
-      if not tyCheck(fTy, ty(v)) then tyError(fTy, ty(v)) end
-    end
-    for f in pairs(st["#tys"]) do
-      if nil == t[f] and nil == st["#defaults"][f] then
-        error("missing field: " .. f)
-      end
-    end
-    return setmetatable(t, st)
-  end)
+  constructor(st, civ.structConstructor)
   return st
 end)
 
