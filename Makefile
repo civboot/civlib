@@ -16,6 +16,7 @@ test: lua build
 
 lua:
 	LUA_PATH=${LP} lua tests/test_civ.lua
+	LUA_PATH=${LP} lua tests/test_gap.lua
 	LUA_PATH=${LP} lua tests/test_sh.lua
 
 build:

@@ -15,6 +15,7 @@ build = {
   type = "builtin",
   modules = {
     civ = "lua/civ.lua",
+    ["civ.gap"] = "lua/civ/gap.lua"
     ["civ.sh"] = "lua/civ/sh.lua",
     ["civ.unix"] = "lua/civ/unix.lua"
   }
