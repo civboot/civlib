@@ -1,5 +1,5 @@
 package = "civ"
-version = "0.1.0-1"
+version = "0.1.1"
 source = {
   url = "git+ssh://git@github.com/civboot/civlib.git"
 }
