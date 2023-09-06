@@ -1,16 +1,19 @@
 local CIV = {checkField = false}
 
-local civ = {}
+local civ = require'civ.fmt'
 
 -- ###################
 -- # Utility Functions
 local add = table.insert
 
 local function identity(v) return v end
+civ.sfmt = string.format
 civ.noop = function() end
 civ.noopFn = function() return noop end
 civ.max = function(a, b) if a > b then return a end return b end
 civ.min = function(a, b) if a < b then return a end return b end
+civ.isEven = function(a) return a % 2 == 0 end
+civ.isOdd  = function(a) return a % 2 == 1 end
 civ.bound = function(v, min, max)
   if v > max then return max end
   if v < min then return min end
@@ -164,12 +167,7 @@ local function tyName(obj)
   local mt = getmetatable(obj)
   if not mt or not mt.__name then return type(obj) end
   return mt.__name
-end
-
-local function fmtString(s)
-  if not string.find(s, '%s') then return s
-  else return string.format("%q", s) end
-end
+end; civ.tyName = tyName
 
 -- __index function for only getting methods
 local function methIndex(self, k)
@@ -287,6 +285,65 @@ local function method(ty, name, fn) ty[name] = fn  end
 civ.methods = function(ty, m)
   for name, fn in pairs(m) do method(ty, name, fn) end
 end
+
+-------------------------------
+-- Formatter
+
+civ.fnFmt = function(fn)
+  local s = debug.getinfo(fn, 'S')
+  return sfmt('function[%s:%s]', s.short_src, s.linedefined)
+end
+
+local STR_AMBIGUOUS = {['true']=true, ['false']=true, ['nil']=true}
+civ.strAmbiguous = function(s)
+  return (
+    STR_AMBIGUOUS[s]
+    or tonumber(s)
+    or s:find('[%s\'"]')
+  )
+end
+
+-- fmtSet has keys:
+--   num: number format string, default %i
+--   key=true: format as a "key"
+civ.NATIVE_FMT = {
+  ['nil']=function(n) return 'nil' end,
+  ['function']=civ.fnFmtBuf,
+  boolean=function(v, set)
+    if set and set.key then return '['..tostring(v)..']'
+    else return tostring(v) end
+  end,
+  number=function(n, set)
+    local f, key = '%i', false
+    if set then f, key = set.num or '%i', set.key end
+    if key then return '['..sfmt(f, n)..']'
+    else        return sfmt(f, n) end
+  end,
+  string=function(s, set)
+    if set and set.key     then return sfmt('[%q]', s) end
+    if civ.strAmbiguous(s) then return sfmt('%q', s) end
+    return s
+  end,
+  table=function(t)
+    local mt = getmetatable(t);
+    if not mt then return tostring(t) end
+    if mt.__tostring then return sfmt('%s{...}', mt.__name or '?') end
+    return sfmt('%s%s', mt.__name or '?', t)
+  end,
+}
+civ.nativeFmt = function(natve, ifmt)
+  return civ.NATIVE_FMT[type(native)](native, ifmt)
+end
+
+local Fmt = {}; civ.Fmt = Fmt
+Fmt.__name = 'Fmt'
+Fmt.__tostring = function() return 'Fmt{}' end
+setmetatable(Fmt, {
+  __name='FmtTy',
+  __call=function(ty_, t)
+    return setmetatable(t, ty_)
+  end,
+})
 
 -- Iter: iterator subtype, traverses indexed table.
 local Iter = newTy('Iter')
@@ -532,36 +589,6 @@ method(civ.LL, 'popBack', function(self)
   return o.v
 end)
 
-
--- ###################
--- # Formatting
--- lua cannot format raw tables. We fix that, and also build up
--- for formatting structs/etc
-
--- tfmt and tfmtBuf are ultra-simple implementations of table formatting
--- that do NOT use __tostring or __name.
-local function tfmtBuf(b, t)
-  if type(t) ~= 'table' then return add(b, tostring(t)) end
-  add(b, '{'); local added = 0
-  for i, v in ipairs(t) do
-    tfmtBuf(b, v); add(b, '; ');
-    added = added + 1
-  end
-  if added > 0 then b[#b] = ' :: ' end
-  for k, v in pairs(t) do
-    if type(k) == 'number' and k <= added then -- already added
-    else
-      tfmtBuf(b, k); add(b, '=')
-      tfmtBuf(b, v); add(b, '; ')
-      added = added + 1
-    end
-  end
-  b[#b + ((added == 0 and 1) or 0)] = '}'
-end
-local function tfmt(t)
-  local b = {}; tfmtBuf(b, t); return table.concat(b)
-end; civ.tfmt = tfmt
-
 -- Return the tostring function for the type
 -- or nil if it's a table without __tostring
 local function getToString(v)
@@ -572,7 +599,7 @@ end; civ.getToString = getToString
 
 local function toString(v)
   local to = getToString(v); if to then return to(v) end
-  return tfmt(v)
+  return civ.tfmt(v)
 end; civ.toString = toString
 
 -- print function that respects io.stdout and uses tfmt for tables
@@ -589,117 +616,34 @@ civ.errorf = function(...) error(string.format(...)) end
 
 local fmtBuf = nil
 
-local function fmtTableIndent(b, t, keys)
-  local indents = b.indents or 0; b.indents = indents + 1
-  local added = false
-  table.insert(b, '\n')
-  for _, key in keys do
-    added = true
-    for i=1, indents-1 do table.insert(b, indent) end
-    table.insert(b, '+ ')
-    fmtBuf(b, key);    table.insert(b, '=')
-    fmtBuf(b, t[key]); table.insert(b, '\n')
-  end
-  b.indents = indents - 1
-  if not added then  b[#b] = 'HERE IS MEj'
-  else               b[#b] = '\n' end
-end
-
-local function fmtTableRaw(b, t, keys)
-  if b.indent then return fmtTableIndent(b, t, keys) end
-  table.insert(b, '{')
-  local endAdd = 1
-  for _, key in keys do
-    if pre then table.insert(b, pre) end
-    fmtBuf(b, key);    table.insert(b, '=')
-    fmtBuf(b, t[key]); table.insert(b, ' ')
-    endAdd = 0 -- remove space for last
-  end
-  b[#b + endAdd] = '}'
-end
-
-local _bufFmtTy = {
-  number = table.insert,
-  boolean = function(b, bool)
-    if(bool) then table.insert(b, 'true')
-    else          table.insert(b, 'false') end
-  end,
-  ['nil'] = function(b, obj) table.insert(b, 'nil') end,
-  string = function(b, s)
-    if not string.find(s, '%s') then table.insert(b, s)
-    else
-      table.insert(b, '"')
-      table.insert(b, s)
-      table.insert(b, '"')
-    end
-  end,
-  ['function'] = function(b, f)
-    local s = debug.getinfo(f, 'S')
-    b[#b + 1] = 'function['
-    b[#b + 1] = s.short_src;   b[#b + 1] = ':'
-    b[#b + 1] = s.linedefined; b[#b + 1] = ']'
-  end,
-  table = function(b, t)
-    local mt = getmetatable(t)
-    if mt and mt.iter and b.indent then -- nothing
-    elseif mt and mt.__tostring then
-      return table.insert(b, tostring(t))
-    end
-    fmtTableRaw(b, t, orderedKeys(t))
-  end,
-}
 
 method(Map, '__tostring', function(t)
   local b = {}; fmtTableRaw(b, t, orderedKeys(t))
   return concat(b)
 end)
-fmtBuf = function (b, obj) _bufFmtTy[type(obj)](b, obj) end
 
--- Use as 'b' in the fmt.* functions to override options.
-local Fmt = newTy('Fmt')
-constructor(Fmt, function(ty_, obj, indent)
-  local b = {indent=indent}
-  fmtBuf(b, obj)
-  return setmetatable(b, ty_)
-end)
-method(Fmt, '__index', methIndex)
-method(Fmt, 'pretty', function(obj) return Fmt(obj, '  ') end)
-method(Fmt, 'write', function(self, f)
-  for _, v in ipairs(self) do f:write(tostring(v)) end
-end)
-method(Fmt, 'print', function(self)
-  self:write(io.stdout); io.stdout:write('\n')
-end)
-method(Fmt, '__tostring', function(self)
-  return table.concat(self)
-end)
+-- FIXME
+-- method(Set, '__tostring', function(self)
+--   local b, endAdd = {'{'}, 1
+--   for _, k in orderedKeys(self) do
+--     fmtBuf(b, k); table.insert(b, ' '); endAdd = 0
+--   end
+--   b[#b + endAdd] = '}'; return concat(b)
+-- end)
+-- result = Set{'a', 'b', 'c'}; assert("{a b c}"   == tostring(result))
+-- result:add('d');             assert("{a b c d}" == tostring(result))
 
-method(Set, '__tostring', function(self)
-  local b, endAdd = {'{'}, 1
-  for _, k in orderedKeys(self) do
-    fmtBuf(b, k); table.insert(b, ' '); endAdd = 0
-  end
-  b[#b + endAdd] = '}'; return concat(b)
-end)
-result = Set{'a', 'b', 'c'}; assert("{a b c}"   == tostring(result))
-result:add('d');             assert("{a b c d}" == tostring(result))
-
-method(List, '__tostring', function(self)
-  local b, endAdd = {'['}, 1
-  for _, v in ipairs(self) do
-    fmtBuf(b, v); table.insert(b, ' ')
-    endAdd = 0 -- remove last space
-  end
-  b[#b + endAdd] = ']'; return concat(b)
-end)
-assert("[5 6 3 4]"  == tostring(List{5, 6, 3, 4}))
-assert("{a=5 b=77}" == tostring(Map{a=5, b=77}))
-
--- fmt any object
-local function fmt(obj)
-  local b = {}; fmtBuf(b, obj);
-  return concat(b, "")
-end
+-- FIXME
+-- method(List, '__tostring', function(self)
+--   local b, endAdd = {'['}, 1
+--   for _, v in ipairs(self) do
+--     fmtBuf(b, v); table.insert(b, ' ')
+--     endAdd = 0 -- remove last space
+--   end
+--   b[#b + endAdd] = ']'; return concat(b)
+-- end)
+-- assert("[5 6 3 4]"  == tostring(List{5, 6, 3, 4}))
+-- assert("{a=5 b=77}" == tostring(Map{a=5, b=77}))
 
 local function tyError(req, given)
   error(string.format("%s is not an ancestor of %s", given, req))
@@ -888,7 +832,7 @@ local function tyCheckPath(st, path, given)
   local req = pathTy(st, path)
   if not tyCheck(req, given) then error(string.format(
     "%s not is not ancestor of %s (%s.%s)",
-    given, req, st, fmt(path)
+    given, req, st, civ.tfmt(path)
   ))end
   return req
 end
@@ -942,7 +886,7 @@ local function fillBuf(b, num, filler)
   return b
 end
 
-local function fmtStringDiffBuf(b, sL, sR)
+local function stringDiffBuf(b, sL, sR)
   local linesL = List.fromIterV(lines(sL))
   local linesR = List.fromIterV(lines(sR))
   local l, c = linesDiffPlace(linesL, linesR)
@@ -957,20 +901,33 @@ local function fmtStringDiffBuf(b, sL, sR)
   add(b, '####(end diff)\n')
   return table.concat(b)
 end
-local function fmtStringDiff(sL, sR)
-  return fmtStringDiffBuf({}, sL, sR)
+local function stringDiff(sL, sR)
+  return stringDiffBuf({}, sL, sR)
 end
 
-local function assertEq(left, right)
+local function assertEq(left, right, pretty)
   if eq(left, right) then return end
   err = {}
   add(err, "Values not equal:")
-  add(err, "\n   left: "); tfmtBuf(err, left)
-  add(err, "\n  right: "); tfmtBuf(err, right)
+  if pretty then
+    add(err, "\nLEFT:\n"); add(err, tostring(Fmt.pretty(left)))
+    add(err, "\nRIGHT:\n"); add(err, tostring(Fmt.pretty(right)))
+  else
+    add(err, "\n   left: "); civ.tfmtBuf(err, left)
+    add(err, "\n  right: "); civ.tfmtBuf(err, right)
+  end
   if type(left) == 'string' and type(right) == 'string' then
-    fmtStringDiffBuf(err, left, right)
+    stringDiffBuf(err, left, right)
   end
   error(concat(err))
+end
+
+civ.assertError = function(fn, errPat, plain)
+  local status, err = pcall(fn)
+  if status then error('! No error received, expected error: '..errPat) end
+  if not err:find(errPat, 1, plain) then errorf(
+    '! Expected error %q but got %q', errPat, err
+  )end
 end
 
 local result = List{1, 'a', 2}
@@ -983,7 +940,7 @@ assert([[
 right: 12d
          ^ (column 3)
 ####(end diff)
-]] == fmtStringDiff('abc\n123', 'abc\n12d'))
+]] == stringDiff('abc\n123', 'abc\n12d'))
 
 -- ###################
 -- # File Helpers
@@ -1306,7 +1263,7 @@ method(Query, 'select', function(self, sel)
     -- by index uses the last field name
     if 'number' == type(key) then key = p[#p] end
     if 'string' ~= type(key) then error(
-      'must provide name for non-key path: ' .. fmt(key)
+      'must provide name for non-key path: ' .. tfmt(key)
     )end
     if paths[key] then error(
       'key used multiple times: ' .. key
@@ -1331,7 +1288,7 @@ end)
 local function buildQuery(query, field)
   local st = queryStruct(query)
   st = pathTy(st, rawget(query, '#path'))
-  local tys = assert(rawget(st, '#tys'), tfmt(st))
+  local tys = assert(rawget(st, '#tys'), civ.tfmt(st))
   if not tys[field] then error(
     string.format("%s does not have field %s", st, field)
   )end
