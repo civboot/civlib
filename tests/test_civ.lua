@@ -23,9 +23,6 @@ test("util", nil, function()
 
   assert(0, decAbs(1)); assert(0, decAbs(-1))
   assert('a', strLast('cba'))
-  assert(tostring == getToString(4))
-  assert(nil == getToString({}))
-  assert(List.__tostring == getToString(List{}))
 
   local t = {a=8, b=9}
   assert(8 == pop(t, 'a')) assert(9 == pop(t, 'b'))
@@ -66,15 +63,31 @@ test("str", nil, function()
   assertEq({'1', ' ', 'a', 'c'}, explode'1 ac')
 end)
 
--- FIXME
--- test("fmt", nil, function()
---   assertEq("{1=1 2=2}", fmt({1, 2}))
---   assertEq([[{baz=boo foo=bar}]], fmt({foo="bar", baz="boo"}))
---   assertEq({foo=bar, baz=2}, {foo=bar, baz=2})
---   assertEq("{1=1 2=2 3=3}", tostring(Fmt{1, 2, 3}))
---   assertEq('\n+ 1=1\n+ 2=2\n+ 3=3\n',
---            tostring(Fmt.pretty{1, 2, 3}))
--- end)
+test("safeToStr", nil, function()
+  assertEq("a123",      safeToStr("a123"))
+  assertEq('"123"',     safeToStr("123"))
+  assertEq('"abc def"', safeToStr("abc def"))
+  assertEq('423',       safeToStr(423))
+  assertEq('1A',        safeToStr(26, {num='%X'}))
+  assertEq('true',      safeToStr(true))
+  assertMatch('Fn@%./lua/civ%.lua:%d+', safeToStr(civ.max))
+  assertMatch('Tbl@0x[a-f0-9]+', safeToStr({hi=4}))
+  assertMatch('?Meta@0x[a-f0-9]+',
+    safeToStr(setmetatable({hi=4}, {})))
+end)
+
+test("fmt", nil, function()
+  assertEq("{1,2,3}", fmt({1, 2, 3}))
+
+  local t = {1, 2}; t[3] = t
+  assertMatch('!ERROR!.*stack overflow', civ.fmt(t))
+  assertMatch('{1,2,RECURSE%[Tbl@0x%w+%]}', civ.fmt(t, {noRecurse=true}))
+  assertEq("{1,2}", fmt({1, 2}))
+  assertEq([[{baz=boo foo=bar}]], fmt({foo="bar", baz="boo"}))
+
+  local result = fmt({a=1, b=2, c=3}, {pretty=true})
+  assertEq('{\n  a=1\n  b=2\n  c=3\n}', result)
+end)
 
 test("eq", nil, function()
   local a, b = {v=42}, {v=42}
@@ -88,7 +101,6 @@ test("eq", nil, function()
 
   setmetatable(b, vTable)
   assert(a == b); assert(b == a)
-
 end)
 
 test('set', nil, function()

@@ -4,12 +4,6 @@ local posix = require'posix'
 local civix  = require'civ.unix'
 
 local sh, shCmd, assertSh = mod.sh, mod.shCmd, mod.assertSh
-local tfmt = mod.tfmt
-
-test('tfmt', nil, function()
-  assertEq('{1; 2}',        tfmt{1, 2})
-  assertEq('{1; 2 :: a=5}', tfmt{1, 2, a=5})
-end)
 
 local EMBEDDED = [[
  echo $(cat << __LUA_EOF__

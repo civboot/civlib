@@ -4,10 +4,10 @@ local civ = require'civ.fmt'
 
 -- ###################
 -- # Utility Functions
-local add = table.insert
+local add, sfmt = table.insert, string.format
 
 local function identity(v) return v end
-civ.sfmt = string.format
+civ.sfmt = sfmt
 civ.noop = function() end
 civ.noopFn = function() return noop end
 civ.max = function(a, b) if a > b then return a end return b end
@@ -105,8 +105,19 @@ local function keyorder(a, b)
   if type(a) == type(b) then return a < b
   else return type(a) < type(b) end
 end
+
+civ.KEYS_MAX = 64
 local function sort(t, fn) table.sort(t, fn); return t end
-local function orderedKeys(t) return iterarr(sort(keysarr(t), keyorder)) end
+local function orderedKeys(t, max)
+  local keys, len, max = {}, 0, max or civ.KEYS_MAX
+  for k in pairs(t) do
+    if len >= max then break end
+    len = len + 1
+    add(keys, k)
+  end
+  pcall(function() table.sort(keys) end)
+  return keys
+end
 
 -- return as the index (first value) from an iterator when there is no index
 local NoIndex = setmetatable({}, {__name='NoIndex'})
@@ -225,11 +236,11 @@ local function newTy(name)
     __index=_tyIndex,
     ["#civTy"]=true,
     ["#defaults"]={},
+    __tostring=civ.fmt,
   }
   ALL_TYS[ty] = ty
   return setmetatable(ty, {
     __name=concat{'Ty[', name, ']'},
-    __tostring=function(_) return name end,
   })
 end
 
@@ -287,11 +298,39 @@ civ.methods = function(ty, m)
 end
 
 -------------------------------
--- Formatter
+-- Fmt: formatter
+--
+-- Fields:
+--   set: table of settings
+--     num: number format string, default='%i'
+--     noRecurse: if true will prevent all recursion
+--
+--   done: if noRecurse is set will contain all formatted
+--     (or currently formatting) tables
+local Fmt = {}; civ.Fmt = Fmt
+Fmt.__name = 'Fmt'
+Fmt.__tostring = function() return 'Fmt{...}' end
+setmetatable(Fmt, { __name='FmtTy',
+  __call=function(ty_, t)
+    local set = t.set or {}
+    set = t.set or {}
+    set.indent   = set.indent or '  '
+    set.keysMax  = set.keysMax or civ.KEYS_MAX
+    set.listSep  = set.listSep or ','
+    set.itemSep  = set.itemSep or ((set.pretty and '\n') or ' ')
+    set.levelSep = set.levelSep or ((set.pretty and '\n') or nil)
+    t.set = set
+    t.done = t.done or {}
+    t.level = t.level or 0
+    return setmetatable(t, Fmt)
+  end,
+})
+Fmt.__index=function(f, key) return Fmt[key] end
 
-civ.fnFmt = function(fn)
-  local s = debug.getinfo(fn, 'S')
-  return sfmt('function[%s:%s]', s.short_src, s.linedefined)
+civ.fnToStr = function(fn)
+  local s = debug.getinfo(fn, 'nS')
+  local n = ''; if s.name then n = sfmt('%q', s.name) end
+  return sfmt('Fn%s@%s:%s', n, s.short_src, s.linedefined)
 end
 
 local STR_AMBIGUOUS = {['true']=true, ['false']=true, ['nil']=true}
@@ -299,65 +338,154 @@ civ.strAmbiguous = function(s)
   return (
     STR_AMBIGUOUS[s]
     or tonumber(s)
-    or s:find('[%s\'"]')
+    or s:find('[%s\'"={}%[%]]')
   )
 end
+-- Invariant: metatable is nil or is missing __tostring
+civ.tblIdUnsafe = function(t)
+  return tostring(t):gsub('table: ', '')
+end
 
--- fmtSet has keys:
---   num: number format string, default %i
---   key=true: format as a "key"
-civ.NATIVE_FMT = {
+civ.metaName = function(mt)
+  if not mt then return 'Tbl' end
+  return mt.__name or '?Meta'
+end
+
+civ.tblToStrSafe = function(t)
+  local mt = getmetatable(t);
+  if not mt then return sfmt('Tbl@%s', civ.tblIdUnsafe(t)) end
+  if mt.__tostring then return sfmt('%s{...}', civ.metaName(mt)) end
+  return sfmt('%s@%s', civ.metaName(mt), civ.tblIdUnsafe(t))
+end
+
+civ.SAFE_TOSTRING = {
   ['nil']=function(n) return 'nil' end,
-  ['function']=civ.fnFmtBuf,
-  boolean=function(v, set)
-    if set and set.key then return '['..tostring(v)..']'
-    else return tostring(v) end
-  end,
+  ['function']=civ.fnToStr,
+  boolean=function(v, set) return tostring(v) end,
   number=function(n, set)
-    local f, key = '%i', false
-    if set then f, key = set.num or '%i', set.key end
-    if key then return '['..sfmt(f, n)..']'
-    else        return sfmt(f, n) end
+    local f = '%i'
+    if set then f = set.num or '%i' end
+    return sfmt(f, n)
   end,
-  string=function(s, set)
-    if set and set.key     then return sfmt('[%q]', s) end
+  string=function(s)
     if civ.strAmbiguous(s) then return sfmt('%q', s) end
     return s
   end,
-  table=function(t)
-    local mt = getmetatable(t);
-    if not mt then return tostring(t) end
-    if mt.__tostring then return sfmt('%s{...}', mt.__name or '?') end
-    return sfmt('%s%s', mt.__name or '?', t)
-  end,
+  table=civ.tblToStrSafe,
 }
-civ.nativeFmt = function(natve, ifmt)
-  return civ.NATIVE_FMT[type(native)](native, ifmt)
+
+civ.safeToStr = function(v, set)
+  return civ.SAFE_TOSTRING[type(v)](v, set)
 end
 
-local Fmt = {}; civ.Fmt = Fmt
-Fmt.__name = 'Fmt'
-Fmt.__tostring = function() return 'Fmt{}' end
-setmetatable(Fmt, {
-  __name='FmtTy',
-  __call=function(ty_, t)
-    return setmetatable(t, ty_)
-  end,
-})
+civ.tblFmt = function(t, f)
+  assert(type(t) == 'table', type(t))
+  local mt = getmetatable(t)
+  local name = civ.metaName(mt)
+  if name ~= 'Tbl' then add(f, name) end
+  local listI, isEmpty = 0, 1
+  f:levelEnter('{')
+  for i, v in ipairs(t) do
+    f:fmt(v); f:sep(f.set.listSep)
+    listI = listI + 1
+  end
+  if listI > 0 then isEmpty = 0; f[#f] = ' :: ' end
+  local keys = orderedKeys(t, f.set.keysMax)
+  for _, k in ipairs(keys) do
+    if type(k) == 'number' and k <= listI then -- already added
+    else
+      f:fmt(k);    add(f, '=')
+      f:fmt(t[k]); f:sep(f.set.itemSep)
+      isEmpty = 0
+    end
+  end
+  if #keys >= f.set.keysMax then add(f, '...'); isEmpty = 1 end
+  f:levelLeave('}', isEmpty)
+end
 
--- Iter: iterator subtype, traverses indexed table.
+-- Handle indent for separation between values and going into
+Fmt.sep = function(f, sep)
+  add(f, sep); if sep == '\n' then
+    add(f, string.rep(f.set.indent, f.level))
+  end
+end
+Fmt.levelEnter = function(f, startCh)
+  add(f, startCh)
+  f.level = f.level + 1
+  if f.set.levelSep then f:sep(f.set.levelSep) end
+end
+Fmt.levelLeave = function(f, endCh, appendLast)
+  f.level = f.level - 1
+  if f.set.levelSep then
+    f[#f + appendLast] = string.rep(f.set.levelSep, f.level)
+    add(f, endCh)
+  else f[#f + appendLast] = endCh end
+end
+
+-- Format the value and store the result in `f`
+Fmt.fmt = function(f, v)
+  local tystr = type(v)
+  if tystr ~= 'table' then
+    add(f, civ.SAFE_TOSTRING[tystr](v, f.set))
+    return f
+  end
+  if f.set.noRecurse then
+    if f.done[v] then
+      add(f, 'RECURSE['); add(f, civ.tblToStrSafe(v)); add(f, ']')
+      return f
+    else f.done[v] = true end
+  end
+  local mt = getmetatable(v)
+  local len = #f
+  local ok, err = pcall(function()
+    if not mt then civ.tblFmt(v, f)
+    elseif rawget(mt, '__fmt')      then mt.__fmt(v, f)
+    elseif rawget(mt, '__tostring') ~= civ.fmt then
+      add(f, tostring(v))
+    else civ.tblFmt(v, f) end
+  end)
+  if ok then return f end
+  while #f > len do table.remove(f) end
+  add(f, civ.safeToStr(v) )
+  add(f, '-->!ERROR!['); add(f, civ.safeToStr(err));
+  add(f, ']');
+  return f
+end
+
+Fmt.toStr = function(f) return table.concat(f, '') end
+Fmt.write = function(f, fd)
+  for _, s in ipairs(f) do fd:write(s) end
+end
+Fmt.pnt = function(f)
+  f:write(io.stdout)
+  io.stdout:write('\n')
+  io.stdout:flush()
+end
+
+civ.fmt = function(v, set)
+  return Fmt{set=set or {}}:fmt(v):toStr()
+end
+civ.pnt = function(...)
+  local args = {...}
+  for i, arg in ipairs(args) do
+    if type(arg) ~= 'table' then
+      io.stdout:write(tostring(arg))
+    else io.stdout:write(civ.fmt(arg)) end
+    if i < #args then io.stdout:write('\t') end
+  end
+  io.stdout:write('\n')
+  io.stdout:flush()
+end
+civ.pntf   = function(...) pnt(string.format(...))   end
+civ.errorf = function(...) error(string.format(...)) end
+
+-------------------------------
+-- Core Data Types
+
 local Iter = newTy('Iter')
 constructor(Iter, function(ty, l)
   return setmetatable({data=l, i=0}, ty)
 end)
--- this is NOT right
--- method(Iter, 'filter', function(self, fn)
---   return function()
---     for i, v in self do
---       if fn(v) then return i, v end
---     end
---   end
--- end)
 method(Iter, '__call', function(self, l)
   if self.i < #self.data then
     self.i = self.i + 1
@@ -414,6 +542,7 @@ local Map = newTy('Map')
 constructor(Map,  function(ty_, t)
   return setmetatable(t, ty_)
 end)
+Map.__fmt = civ.tblFmt
 method(Map, '__index', methIndex)
 -- get a value. If vFn is given it will be called to
 -- set the value (and return it)
@@ -589,61 +718,29 @@ method(civ.LL, 'popBack', function(self)
   return o.v
 end)
 
--- Return the tostring function for the type
--- or nil if it's a table without __tostring
-local function getToString(v)
-  if type(v) ~= 'table' then return tostring end
-  local mt = getmetatable(v)
-  return (mt and (mt.__tostring))
-end; civ.getToString = getToString
 
-local function toString(v)
-  local to = getToString(v); if to then return to(v) end
-  return civ.tfmt(v)
-end; civ.toString = toString
-
--- print function that respects io.stdout and uses tfmt for tables
-local function pnt(...)
-  local args = {...}
-  for i, arg in ipairs(args) do
-    io.stdout:write(toString(arg))
-    if i < #args then io.stdout:write('\t') end
-  end; io.stdout:write('\n')
-  io.stdout:flush()
-end; civ.pnt = pnt
-civ.pntf   = function(...) pnt(string.format(...))   end
-civ.errorf = function(...) error(string.format(...)) end
-
-local fmtBuf = nil
-
-
-method(Map, '__tostring', function(t)
-  local b = {}; fmtTableRaw(b, t, orderedKeys(t))
-  return concat(b)
+method(Set, '__fmt', function(self, f)
+  add(f, 'Set{'); local isEmpty = 1
+  local keys = orderedKeys(self, f.set.keysMax)
+  for _, k in ipairs(keys) do
+    f:fmt(k); add(f, ' '); isEmpty = 0
+  end
+  if #keys >= civ.KEYS_MAX then add(f, '...'); isEmpty = 1 end
+  f[#f + isEmpty] = '}'
 end)
+result = Set{'a', 'b', 'c'}; assert("Set{a b c}"   == tostring(result))
+result:add('d');             assert("Set{a b c d}" == tostring(result))
 
--- FIXME
--- method(Set, '__tostring', function(self)
---   local b, endAdd = {'{'}, 1
---   for _, k in orderedKeys(self) do
---     fmtBuf(b, k); table.insert(b, ' '); endAdd = 0
---   end
---   b[#b + endAdd] = '}'; return concat(b)
--- end)
--- result = Set{'a', 'b', 'c'}; assert("{a b c}"   == tostring(result))
--- result:add('d');             assert("{a b c d}" == tostring(result))
+List.__fmt=function(self, f)
+  add(f, '['); local isEmpty = 1
+  for _, v in ipairs(self) do
+    f:fmt(v); add(f, ' '); isEmpty = 0
+  end
+  f[#f + isEmpty] = ']'
+end
 
--- FIXME
--- method(List, '__tostring', function(self)
---   local b, endAdd = {'['}, 1
---   for _, v in ipairs(self) do
---     fmtBuf(b, v); table.insert(b, ' ')
---     endAdd = 0 -- remove last space
---   end
---   b[#b + endAdd] = ']'; return concat(b)
--- end)
--- assert("[5 6 3 4]"  == tostring(List{5, 6, 3, 4}))
--- assert("{a=5 b=77}" == tostring(Map{a=5, b=77}))
+assert("[5 6 3 4]"  == tostring(List{5, 6, 3, 4}))
+result = tostring(Map{a=5, b=77}); assert("Map{a=5 b=77}" == result)
 
 local function tyError(req, given)
   error(string.format("%s is not an ancestor of %s", given, req))
@@ -739,12 +836,6 @@ local function structNewIndex (t, k, v)
   rawset(t, k, v)
 end
 
-local function structFmt(t)
-  local b = {tyName(t)}
-  fmtTableRaw(b, t, Iter(getmetatable(t)['#ordered']))
-  return concat(b, '')
-end
-
 local function specifyFields(fields)
   local tys, defaults, ordered = {}, {}, {}
   for _, f in ipairs(fields) do
@@ -832,7 +923,7 @@ local function tyCheckPath(st, path, given)
   local req = pathTy(st, path)
   if not tyCheck(req, given) then error(string.format(
     "%s not is not ancestor of %s (%s.%s)",
-    given, req, st, civ.tfmt(path)
+    given, req, st, civ.fmt(path)
   ))end
   return req
 end
@@ -862,7 +953,7 @@ constructor(struct, function(ty_, name, fields)
     ["#tys"]=tys,  ["#ordered"]=ordered,
     ["#defaults"]=defaults,
     __index=structIndex, __newindex=structNewIndex,
-    __tostring=structFmt,
+    __tostring=civ.fmt,
   })
   constructor(st, civ.structConstructor)
   return st
@@ -899,32 +990,36 @@ local function stringDiffBuf(b, sL, sR)
   fillBuf(b, c - 1 + 7);
   add(b, string.format('^ (column %q)\n', c))
   add(b, '####(end diff)\n')
-  return table.concat(b)
 end
 local function stringDiff(sL, sR)
-  return stringDiffBuf({}, sL, sR)
+  local b = {}
+  stringDiffBuf(b, sL, sR)
+  return table.concat(b, '')
 end
 
 local function assertEq(left, right, pretty)
   if eq(left, right) then return end
-  err = {}
-  add(err, "Values not equal:")
-  if pretty then
-    add(err, "\nLEFT:\n"); add(err, tostring(Fmt.pretty(left)))
-    add(err, "\nRIGHT:\n"); add(err, tostring(Fmt.pretty(right)))
-  else
-    add(err, "\n   left: "); civ.tfmtBuf(err, left)
-    add(err, "\n  right: "); civ.tfmtBuf(err, right)
-  end
+  local f = Fmt{}
+  add(f, "Values not equal:")
+  add(f, "\n LEFT: ");  f:fmt(left)
+  add(f, "\nRIGHT: "); f:fmt(right)
+  add(f, '\n')
   if type(left) == 'string' and type(right) == 'string' then
-    stringDiffBuf(err, left, right)
+    stringDiffBuf(f, left, right)
   end
-  error(concat(err))
+  error(f:toStr())
+end
+
+civ.assertMatch = function(expectPat, result)
+  if not result:match(expectPat) then
+    errorf('Does not match pattern:\nPattern: %q\n Result:  %s',
+           expectPat, result)
+  end
 end
 
 civ.assertError = function(fn, errPat, plain)
-  local status, err = pcall(fn)
-  if status then error('! No error received, expected error: '..errPat) end
+  local ok, err = pcall(fn)
+  if ok then error('! No error received, expected error: '..errPat) end
   if not err:find(errPat, 1, plain) then errorf(
     '! Expected error %q but got %q', errPat, err
   )end
@@ -1541,10 +1636,7 @@ update(civ, {
 
   -- Formatters
   concat = concat,
-  Fmt=Fmt, fmt = fmt,
-  fmtBuf = fmtBuf,
   fillBuf = fillBuf,
-  fmtTableRaw = fmtTableRaw,
 
   -- struct
   ty = ty,
@@ -1552,7 +1644,6 @@ update(civ, {
   pathVal = pathVal, pathTy = pathTy,
   dotSplit = dotSplit,
   genStruct = genStruct,
-  orderedKeys = orderedKeys,
   Display = Display,
 
   -- newTy

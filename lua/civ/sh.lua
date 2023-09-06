@@ -181,7 +181,7 @@ local function xshu(cmd, set) io.stdout:write(xsh(cmd, set)) end
 
 return {
   shu=shu, xshu=xshu,
-  sh=sh, xsh=xsh, shCmd=shCmd, tfmt=tfmt,
+  sh=sh, xsh=xsh, shCmd=shCmd,
   quoted=quoted, embedded=embedded,
   SET=SET,
   extend=extend, asStr=asStr,
