@@ -80,13 +80,15 @@ test("fmt", nil, function()
   assertEq("{1,2,3}", fmt({1, 2, 3}))
 
   local t = {1, 2}; t[3] = t
-  assertMatch('!ERROR!.*stack overflow', civ.fmt(t))
+  assertMatch('!ERROR!.*stack overflow', civ.fmt(t, {safe=true}))
   assertMatch('{1,2,RECURSE%[Tbl@0x%w+%]}', civ.fmt(t, {noRecurse=true}))
   assertEq("{1,2}", fmt({1, 2}))
   assertEq([[{baz=boo foo=bar}]], fmt({foo="bar", baz="boo"}))
 
   local result = fmt({a=1, b=2, c=3}, {pretty=true})
   assertEq('{\n  a=1\n  b=2\n  c=3\n}', result)
+
+  assertEq('{1,2 :: a=12}', fmt({1, 2, a=12}))
 end)
 
 test("eq", nil, function()

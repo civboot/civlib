@@ -2,6 +2,9 @@ local CIV = {checkField = false}
 
 local civ = require'civ.fmt'
 
+civ.KEYS_MAX = 64
+civ.FMT_SAFE = false
+
 -- ###################
 -- # Utility Functions
 local add, sfmt = table.insert, string.format
@@ -106,7 +109,6 @@ local function keyorder(a, b)
   else return type(a) < type(b) end
 end
 
-civ.KEYS_MAX = 64
 local function sort(t, fn) table.sort(t, fn); return t end
 local function orderedKeys(t, max)
   local keys, len, max = {}, 0, max or civ.KEYS_MAX
@@ -301,8 +303,7 @@ end
 -- Fmt: formatter
 --
 -- Fields:
---   set: table of settings
---     num: number format string, default='%i'
+--   set: table of settings (see code), as well as
 --     noRecurse: if true will prevent all recursion
 --
 --   done: if noRecurse is set will contain all formatted
@@ -314,11 +315,14 @@ setmetatable(Fmt, { __name='FmtTy',
   __call=function(ty_, t)
     local set = t.set or {}
     set = t.set or {}
+    set.safe     = set.safe or civ.FMT_SAFE
     set.indent   = set.indent or '  '
     set.keysMax  = set.keysMax or civ.KEYS_MAX
     set.listSep  = set.listSep or ','
     set.itemSep  = set.itemSep or ((set.pretty and '\n') or ' ')
     set.levelSep = set.levelSep or ((set.pretty and '\n') or nil)
+    set.num      = set.num or '%i'
+    set.tblSep = ' :: '
     t.set = set
     t.done = t.done or {}
     t.level = t.level or 0
@@ -383,24 +387,26 @@ civ.tblFmt = function(t, f)
   local mt = getmetatable(t)
   local name = civ.metaName(mt)
   if name ~= 'Tbl' then add(f, name) end
-  local listI, isEmpty = 0, 1
+  local lenI = #t
   f:levelEnter('{')
-  for i, v in ipairs(t) do
-    f:fmt(v); f:sep(f.set.listSep)
-    listI = listI + 1
+  for i=1,lenI do
+    f:fmt(t[i])
+    if i < lenI then f:sep(f.set.listSep) end
   end
-  if listI > 0 then isEmpty = 0; f[#f] = ' :: ' end
+
   local keys = orderedKeys(t, f.set.keysMax)
-  for _, k in ipairs(keys) do
-    if type(k) == 'number' and k <= listI then -- already added
+  local lenK = #keys
+  if lenI > 0 and lenK - lenI > 0 then f:sep(f.set.tblSep) end
+  for i, k in ipairs(keys) do
+    if type(k) == 'number' and 0<k and k<=lenI then -- already added
     else
       f:fmt(k);    add(f, '=')
-      f:fmt(t[k]); f:sep(f.set.itemSep)
-      isEmpty = 0
+      f:fmt(t[k]);
+      if i < lenK then f:sep(f.set.itemSep) end
     end
   end
-  if #keys >= f.set.keysMax then add(f, '...'); isEmpty = 1 end
-  f:levelLeave('}', isEmpty)
+  if lenK >= f.set.keysMax then add(f, '...'); end
+  f:levelLeave('}')
 end
 
 -- Handle indent for separation between values and going into
@@ -414,12 +420,12 @@ Fmt.levelEnter = function(f, startCh)
   f.level = f.level + 1
   if f.set.levelSep then f:sep(f.set.levelSep) end
 end
-Fmt.levelLeave = function(f, endCh, appendLast)
+Fmt.levelLeave = function(f, endCh)
   f.level = f.level - 1
   if f.set.levelSep then
-    f[#f + appendLast] = string.rep(f.set.levelSep, f.level)
+    f:sep(f.set.levelSep)
     add(f, endCh)
-  else f[#f + appendLast] = endCh end
+  else add(f, endCh) end
 end
 
 -- Format the value and store the result in `f`
@@ -436,19 +442,24 @@ Fmt.fmt = function(f, v)
     else f.done[v] = true end
   end
   local mt = getmetatable(v)
-  local len = #f
-  local ok, err = pcall(function()
+  local len, level = #f, f.level
+  local doFmt = function()
     if not mt then civ.tblFmt(v, f)
     elseif rawget(mt, '__fmt')      then mt.__fmt(v, f)
     elseif rawget(mt, '__tostring') ~= civ.fmt then
       add(f, tostring(v))
     else civ.tblFmt(v, f) end
-  end)
-  if ok then return f end
-  while #f > len do table.remove(f) end
-  add(f, civ.safeToStr(v) )
-  add(f, '-->!ERROR!['); add(f, civ.safeToStr(err));
-  add(f, ']');
+  end
+  if f.set.safe then
+    local ok, err = pcall(doFmt)
+    if not ok then
+      while #f > len do table.remove(f) end
+      f.level = level
+      add(f, civ.safeToStr(v) )
+      add(f, '-->!ERROR!['); add(f, civ.safeToStr(err));
+      add(f, ']');
+    end
+  else doFmt() end
   return f
 end
 
@@ -719,17 +730,18 @@ method(civ.LL, 'popBack', function(self)
 end)
 
 
-method(Set, '__fmt', function(self, f)
-  add(f, 'Set{'); local isEmpty = 1
+Set.__fmt = function(self, f)
+  add(f, 'Set{')
   local keys = orderedKeys(self, f.set.keysMax)
-  for _, k in ipairs(keys) do
-    f:fmt(k); add(f, ' '); isEmpty = 0
+  for i, k in ipairs(keys) do
+    f:fmt(k);
+    if i < #keys then f:sep(f.set.listSep) end
   end
-  if #keys >= civ.KEYS_MAX then add(f, '...'); isEmpty = 1 end
-  f[#f + isEmpty] = '}'
-end)
-result = Set{'a', 'b', 'c'}; assert("Set{a b c}"   == tostring(result))
-result:add('d');             assert("Set{a b c d}" == tostring(result))
+  if #keys >= civ.KEYS_MAX then add(f, '...'); end
+  add(f, '}')
+end
+result = Set{'a', 'b', 'c'}; assert("Set{a,b,c}"   == tostring(result))
+result:add('d');             assert("Set{a,b,c,d}" == tostring(result))
 
 List.__fmt=function(self, f)
   add(f, '['); local isEmpty = 1
@@ -999,7 +1011,8 @@ end
 
 local function assertEq(left, right, pretty)
   if eq(left, right) then return end
-  local f = Fmt{}
+  if pretty == nil then pretty = true end
+  local f = Fmt{set={pretty=pretty}}
   add(f, "Values not equal:")
   add(f, "\n LEFT: ");  f:fmt(left)
   add(f, "\nRIGHT: "); f:fmt(right)
