@@ -1,5 +1,8 @@
 # civlib: small libraries for Civboot
 
+> Note: I will be migrating the lua code here to https://github.com/civboot/civlua
+> after I return from a 6 month hiatus.
+
 civlib is a set of small libraries embodying Civboot's software design
 principles. It is primarily to bootstrap [fngi](https://github.com/civboot/fngi)
 and set up Civboot OS's software, but is
