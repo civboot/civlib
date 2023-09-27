@@ -14,5 +14,6 @@ dependencies = {
 build = {
   type = "builtin",
   modules = {
+    civ = "civ.lua",
   }
 }
