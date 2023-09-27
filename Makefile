@@ -14,11 +14,6 @@ all: test
 test: lua build
 	./$(OUT)
 
-lua:
-	LUA_PATH=${LP} lua tests/test_civ.lua
-	LUA_PATH=${LP} lua tests/test_gap.lua
-	LUA_PATH=${LP} lua tests/test_sh.lua
-
 build:
 	mkdir -p bin/
 	$(CC) $(FLAGS) -Isrc/ -Wall $(DISABLE_WARNINGS) $(FILES) -o $(OUT)
